@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/JulienTant/blogwatcher-cli/internal/model"
@@ -30,7 +31,9 @@ func ScanBlog(db *storage.Database, blog model.Blog) ScanResult {
 		if discovered, err := rss.DiscoverFeedURL(blog.URL, 30*time.Second); err == nil && discovered != "" {
 			feedURL = discovered
 			blog.FeedURL = discovered
-			_ = db.UpdateBlog(blog)
+			if err := db.UpdateBlog(blog); err != nil {
+				fmt.Fprintf(os.Stderr, "update blog: %v\n", err)
+			}
 		}
 	}
 
@@ -99,7 +102,9 @@ func ScanBlog(db *storage.Database, blog model.Blog) ScanResult {
 		}
 	}
 
-	_ = db.UpdateBlogLastScanned(blog.ID, time.Now())
+	if err := db.UpdateBlogLastScanned(blog.ID, time.Now()); err != nil {
+		fmt.Fprintf(os.Stderr, "update last scanned: %v\n", err)
+	}
 
 	return ScanResult{
 		BlogName:    blog.Name,
@@ -138,7 +143,11 @@ func ScanAllBlogs(db *storage.Database, workers int) ([]ScanResult, error) {
 				errs <- err
 				return
 			}
-			defer workerDB.Close()
+			defer func() {
+				if err := workerDB.Close(); err != nil {
+					fmt.Fprintf(os.Stderr, "close: %v\n", err)
+				}
+			}()
 			for item := range jobs {
 				results[item.Index] = ScanBlog(workerDB, item.Blog)
 			}

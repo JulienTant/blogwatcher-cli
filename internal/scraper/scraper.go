@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"net/url"
 	"strings"
 	"time"
@@ -31,7 +32,11 @@ func ScrapeBlog(blogURL string, selector string, timeout time.Duration) ([]Scrap
 	if err != nil {
 		return nil, ScrapeError{Message: fmt.Sprintf("failed to fetch page: %v", err)}
 	}
-	defer response.Body.Close()
+	defer func() {
+		if err := response.Body.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "close: %v\n", err)
+		}
+	}()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return nil, ScrapeError{Message: fmt.Sprintf("failed to fetch page: status %d", response.StatusCode)}
 	}

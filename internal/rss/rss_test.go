@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 const sampleFeed = `<?xml version="1.0" encoding="UTF-8" ?>
@@ -25,41 +27,37 @@ const sampleFeed = `<?xml version="1.0" encoding="UTF-8" ?>
 
 func TestParseFeed(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(sampleFeed))
+		if _, writeErr := w.Write([]byte(sampleFeed)); writeErr != nil {
+			http.Error(w, writeErr.Error(), http.StatusInternalServerError)
+			return
+		}
 	}))
 	defer server.Close()
 
 	articles, err := ParseFeed(server.URL, 2*time.Second)
-	if err != nil {
-		t.Fatalf("parse feed: %v", err)
-	}
-	if len(articles) != 2 {
-		t.Fatalf("expected 2 articles, got %d", len(articles))
-	}
-	if articles[0].PublishedDate == nil {
-		t.Fatalf("expected published date")
-	}
+	require.NoError(t, err, "parse feed")
+	require.Len(t, articles, 2)
+	require.NotNil(t, articles[0].PublishedDate)
 }
 
 func TestDiscoverFeedURL(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`<html><head><link rel="alternate" type="application/rss+xml" href="/feed.xml" /></head></html>`))
+		if _, writeErr := w.Write([]byte(`<html><head><link rel="alternate" type="application/rss+xml" href="/feed.xml" /></head></html>`)); writeErr != nil {
+			http.Error(w, writeErr.Error(), http.StatusInternalServerError)
+			return
+		}
 	})
 	mux.HandleFunc("/feed.xml", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(sampleFeed))
+		if _, writeErr := w.Write([]byte(sampleFeed)); writeErr != nil {
+			http.Error(w, writeErr.Error(), http.StatusInternalServerError)
+			return
+		}
 	})
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
 	feedURL, err := DiscoverFeedURL(server.URL, 2*time.Second)
-	if err != nil {
-		t.Fatalf("discover feed: %v", err)
-	}
-	if feedURL == "" {
-		t.Fatalf("expected feed url")
-	}
+	require.NoError(t, err, "discover feed")
+	require.NotEqual(t, "", feedURL, "expected feed url")
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/JulienTant/blogwatcher-cli/internal/model"
 	"github.com/JulienTant/blogwatcher-cli/internal/storage"
+	"github.com/stretchr/testify/require"
 )
 
 const sampleFeed = `<?xml version="1.0" encoding="UTF-8" ?>
@@ -28,34 +29,26 @@ const sampleFeed = `<?xml version="1.0" encoding="UTF-8" ?>
 
 func TestScanBlogRSS(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(sampleFeed))
+		if _, writeErr := w.Write([]byte(sampleFeed)); writeErr != nil {
+			http.Error(w, writeErr.Error(), http.StatusInternalServerError)
+			return
+		}
 	}))
 	defer server.Close()
 
 	db := openTestDB(t)
-	defer db.Close()
+	defer func() { require.NoError(t, db.Close()) }()
 
 	blog, err := db.AddBlog(model.Blog{Name: "Test", URL: "https://example.com", FeedURL: server.URL})
-	if err != nil {
-		t.Fatalf("add blog: %v", err)
-	}
+	require.NoError(t, err, "add blog")
 
 	result := ScanBlog(db, blog)
-	if result.NewArticles != 2 {
-		t.Fatalf("expected 2 new articles, got %d", result.NewArticles)
-	}
-	if result.Source != "rss" {
-		t.Fatalf("expected rss source, got %s", result.Source)
-	}
+	require.Equal(t, 2, result.NewArticles)
+	require.Equal(t, "rss", result.Source)
 
 	articles, err := db.ListArticles(false, nil)
-	if err != nil {
-		t.Fatalf("list articles: %v", err)
-	}
-	if len(articles) != 2 {
-		t.Fatalf("expected 2 articles")
-	}
+	require.NoError(t, err, "list articles")
+	require.Len(t, articles, 2)
 }
 
 func TestScanBlogScraperFallback(t *testing.T) {
@@ -68,8 +61,10 @@ func TestScanBlogScraperFallback(t *testing.T) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(html))
+		if _, writeErr := w.Write([]byte(html)); writeErr != nil {
+			http.Error(w, writeErr.Error(), http.StatusInternalServerError)
+			return
+		}
 	})
 	mux.HandleFunc("/feed.xml", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -78,85 +73,67 @@ func TestScanBlogScraperFallback(t *testing.T) {
 	defer server.Close()
 
 	db := openTestDB(t)
-	defer db.Close()
+	defer func() { require.NoError(t, db.Close()) }()
 
 	blog, err := db.AddBlog(model.Blog{Name: "Test", URL: server.URL, FeedURL: server.URL + "/feed.xml", ScrapeSelector: "article h2 a"})
-	if err != nil {
-		t.Fatalf("add blog: %v", err)
-	}
+	require.NoError(t, err, "add blog")
 
 	result := ScanBlog(db, blog)
-	if result.Source != "scraper" {
-		t.Fatalf("expected scraper source, got %s", result.Source)
-	}
-	if result.NewArticles != 1 {
-		t.Fatalf("expected 1 new article, got %d", result.NewArticles)
-	}
-	if result.Error != "" {
-		t.Fatalf("expected no error, got %s", result.Error)
-	}
+	require.Equal(t, "scraper", result.Source)
+	require.Equal(t, 1, result.NewArticles)
+	require.Equal(t, "", result.Error)
 }
 
 func TestScanAllBlogsConcurrent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(sampleFeed))
+		if _, writeErr := w.Write([]byte(sampleFeed)); writeErr != nil {
+			http.Error(w, writeErr.Error(), http.StatusInternalServerError)
+			return
+		}
 	}))
 	defer server.Close()
 
 	db := openTestDB(t)
-	defer db.Close()
+	defer func() { require.NoError(t, db.Close()) }()
 
 	for i, name := range []string{"TestA", "TestB"} {
 		_, err := db.AddBlog(model.Blog{Name: name, URL: "https://example.com/" + name, FeedURL: server.URL})
-		if err != nil {
-			t.Fatalf("add blog %d: %v", i, err)
-		}
+		require.NoError(t, err, "add blog %d", i)
 	}
 
 	results, err := ScanAllBlogs(db, 2)
-	if err != nil {
-		t.Fatalf("scan all blogs: %v", err)
-	}
-	if len(results) != 2 {
-		t.Fatalf("expected 2 results, got %d", len(results))
-	}
+	require.NoError(t, err, "scan all blogs")
+	require.Len(t, results, 2)
 }
 
 func openTestDB(t *testing.T) *storage.Database {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "blogwatcher.db")
 	db, err := storage.OpenDatabase(path)
-	if err != nil {
-		t.Fatalf("open database: %v", err)
-	}
+	require.NoError(t, err, "open database")
 	return db
 }
 
 func TestScanBlogRespectsExistingArticles(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(sampleFeed))
+		if _, writeErr := w.Write([]byte(sampleFeed)); writeErr != nil {
+			http.Error(w, writeErr.Error(), http.StatusInternalServerError)
+			return
+		}
 	}))
 	defer server.Close()
 
 	db := openTestDB(t)
-	defer db.Close()
+	defer func() { require.NoError(t, db.Close()) }()
 
 	blog, err := db.AddBlog(model.Blog{Name: "Test", URL: "https://example.com", FeedURL: server.URL})
-	if err != nil {
-		t.Fatalf("add blog: %v", err)
-	}
+	require.NoError(t, err, "add blog")
 
 	_, err = db.AddArticle(model.Article{BlogID: blog.ID, Title: "First", URL: "https://example.com/1", DiscoveredDate: ptrTime(time.Now())})
-	if err != nil {
-		t.Fatalf("add article: %v", err)
-	}
+	require.NoError(t, err, "add article")
 
 	result := ScanBlog(db, blog)
-	if result.NewArticles != 1 {
-		t.Fatalf("expected 1 new article, got %d", result.NewArticles)
-	}
+	require.Equal(t, 1, result.NewArticles)
 }
 
 func ptrTime(value time.Time) *time.Time {
