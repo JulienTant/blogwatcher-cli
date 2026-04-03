@@ -1,6 +1,6 @@
 # BlogWatcher
 
-Fork of [Hyaxia/blogwatcher-cli](https://github.com/Hyaxia/blogwatcher-cli).
+Fork of [Hyaxia/blogwatcher](https://github.com/Hyaxia/blogwatcher).
 
 A Go CLI tool to track blog articles, detect new posts, and manage read/unread status. Supports both RSS/Atom feeds and HTML scraping as fallback.
 
@@ -20,7 +20,7 @@ A Go CLI tool to track blog articles, detect new posts, and manage read/unread s
 brew install JulienTant/tap/blogwatcher-cli
 
 # Install the CLI
-go install github.com/JulienTant/blogwatcher-cli-cli/cmd/blogwatcher-cli@latest
+go install github.com/JulienTant/blogwatcher-cli/cmd/blogwatcher-cli@latest
 
 # Or build locally
 go build ./cmd/blogwatcher-cli
@@ -125,7 +125,15 @@ When RSS isn't available, provide a CSS selector that matches article links:
 
 ## Database
 
-BlogWatcher stores data in SQLite at `~/.blogwatcher-cli/blogwatcher-cli.db`:
+BlogWatcher stores data in SQLite at `~/.blogwatcher-cli/blogwatcher-cli.db`.
+
+If upgrading from the original `blogwatcher`, migrate your existing database:
+
+```bash
+mv ~/.blogwatcher/blogwatcher.db ~/.blogwatcher-cli/blogwatcher-cli.db
+```
+
+Tables:
 
 -   **blogs** - Tracked blogs (name, URL, feed URL, scrape selector)
 -   **articles** - Discovered articles (title, URL, dates, read status)
