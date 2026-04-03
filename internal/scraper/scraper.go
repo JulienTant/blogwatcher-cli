@@ -27,13 +27,22 @@ func (e ScrapeError) Error() string {
 	return e.Message
 }
 
-func ScrapeBlog(ctx context.Context, blogURL string, selector string, timeout time.Duration) ([]ScrapedArticle, error) {
-	client := &http.Client{Timeout: timeout}
+// Scraper scrapes HTML pages for article links.
+type Scraper struct {
+	client *http.Client
+}
+
+// NewScraper creates a Scraper with the given HTTP client.
+func NewScraper(client *http.Client) *Scraper {
+	return &Scraper{client: client}
+}
+
+func (s *Scraper) ScrapeBlog(ctx context.Context, blogURL string, selector string) ([]ScrapedArticle, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, blogURL, nil)
 	if err != nil {
 		return nil, ScrapeError{Message: fmt.Sprintf("failed to create request: %v", err)}
 	}
-	response, err := client.Do(req)
+	response, err := s.client.Do(req)
 	if err != nil {
 		return nil, ScrapeError{Message: fmt.Sprintf("failed to fetch page: %v", err)}
 	}

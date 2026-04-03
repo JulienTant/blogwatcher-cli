@@ -3,6 +3,7 @@ module github.com/JulienTant/blogwatcher-cli
 go 1.26.1
 
 require (
+	github.com/DataDog/go-secure-sdk v0.0.7
 	github.com/Masterminds/squirrel v1.5.4
 	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/fatih/color v1.19.0
@@ -44,7 +45,6 @@ require (
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
 	golang.org/x/tools v0.43.0 // indirect
-	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	modernc.org/libc v1.70.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect

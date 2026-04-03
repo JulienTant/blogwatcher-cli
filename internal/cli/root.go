@@ -24,6 +24,7 @@ func NewRootCommand() *cobra.Command {
 	rootCmd.SetVersionTemplate("{{.Version}}\n")
 
 	rootCmd.PersistentFlags().String("db", "", "Path to the SQLite database file (default: ~/.blogwatcher-cli/blogwatcher-cli.db)")
+	rootCmd.PersistentFlags().Bool("unsafe-client", false, "Disable SSRF protection (allow requests to private/loopback IPs)")
 
 	rootCmd.AddCommand(newAddCommand())
 	rootCmd.AddCommand(newRemoveCommand())

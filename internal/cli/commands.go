@@ -3,20 +3,33 @@ package cli
 import (
 	"bufio"
 	"fmt"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/DataDog/go-secure-sdk/net/httpclient"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	"github.com/JulienTant/blogwatcher-cli/internal/controller"
 	"github.com/JulienTant/blogwatcher-cli/internal/model"
+	"github.com/JulienTant/blogwatcher-cli/internal/rss"
 	"github.com/JulienTant/blogwatcher-cli/internal/scanner"
+	"github.com/JulienTant/blogwatcher-cli/internal/scraper"
 	"github.com/JulienTant/blogwatcher-cli/internal/storage"
 )
+
+const httpTimeout = 30 * time.Second
+
+func newHTTPClient() *http.Client {
+	if viper.GetBool("unsafe-client") {
+		return httpclient.UnSafe(httpclient.WithTimeout(httpTimeout))
+	}
+	return httpclient.Safe(httpclient.WithTimeout(httpTimeout))
+}
 
 func newAddCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -148,8 +161,11 @@ func newScanCommand() *cobra.Command {
 				}
 			}()
 
+			client := newHTTPClient()
+			sc := scanner.NewScanner(rss.NewFetcher(client), scraper.NewScraper(client))
+
 			if len(args) == 1 {
-				result, err := scanner.ScanBlogByName(cmd.Context(), db, args[0])
+				result, err := sc.ScanBlogByName(cmd.Context(), db, args[0])
 				if err != nil {
 					return err
 				}
@@ -173,7 +189,7 @@ func newScanCommand() *cobra.Command {
 				if !silent {
 					cprintf([]color.Attribute{color.FgCyan}, "Scanning %d blog(s)...\n\n", len(blogs))
 				}
-				results, err := scanner.ScanAllBlogs(cmd.Context(), db, workers)
+				results, err := sc.ScanAllBlogs(cmd.Context(), db, workers)
 				if err != nil {
 					return err
 				}
@@ -385,10 +401,6 @@ func printScanResult(result scanner.ScanResult) {
 		statusColor = []color.Attribute{color.FgGreen}
 	}
 	cprintf([]color.Attribute{color.FgWhite, color.Bold}, "  %s\n", result.BlogName)
-	if result.Error != "" {
-		cprintfErr(color.FgRed, "    Error: %s\n", result.Error)
-		return
-	}
 	if result.Source == "none" {
 		cprintln([]color.Attribute{color.FgYellow}, "    No feed or scraper configured")
 		return

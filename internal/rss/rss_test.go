@@ -26,6 +26,10 @@ const sampleFeed = `<?xml version="1.0" encoding="UTF-8" ?>
 </channel>
 </rss>`
 
+func newTestFetcher() *Fetcher {
+	return NewFetcher(&http.Client{Timeout: 2 * time.Second})
+}
+
 func TestParseFeed(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, writeErr := w.Write([]byte(sampleFeed)); writeErr != nil {
@@ -35,7 +39,7 @@ func TestParseFeed(t *testing.T) {
 	}))
 	defer server.Close()
 
-	articles, err := ParseFeed(context.Background(), server.URL, 2*time.Second)
+	articles, err := newTestFetcher().ParseFeed(context.Background(), server.URL)
 	require.NoError(t, err, "parse feed")
 	require.Len(t, articles, 2)
 	require.NotNil(t, articles[0].PublishedDate)
@@ -58,7 +62,7 @@ func TestDiscoverFeedURL(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	feedURL, err := DiscoverFeedURL(context.Background(), server.URL, 2*time.Second)
+	feedURL, err := newTestFetcher().DiscoverFeedURL(context.Background(), server.URL)
 	require.NoError(t, err, "discover feed")
 	require.NotEmpty(t, feedURL, "expected feed url")
 }

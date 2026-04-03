@@ -1,3 +1,7 @@
+### Before speaking
+
+Never guess. Ground every claim in actual files, docs, or command output. If you're unsure about a dependency's size, run `go get` and check. If you're unsure about an API, read the source or docs. If you're unsure about behavior, write a test. State what you verified and how — don't speculate.
+
 ### While developing
 
 #### Tests, tests, tests!
