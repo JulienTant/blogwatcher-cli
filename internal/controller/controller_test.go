@@ -64,7 +64,7 @@ func TestGetArticlesFilters(t *testing.T) {
 
 func openTestDB(t *testing.T) *storage.Database {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "blogwatcher.db")
+	path := filepath.Join(t.TempDir(), "blogwatcher-cli.db")
 	db, err := storage.OpenDatabase(path)
 	require.NoError(t, err, "open database")
 	return db
