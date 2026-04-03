@@ -20,7 +20,6 @@ func TestScrapeBlog(t *testing.T) {
 </html>`
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
 		if _, writeErr := w.Write([]byte(html)); writeErr != nil {
 			http.Error(w, writeErr.Error(), http.StatusInternalServerError)
 			return

@@ -29,7 +29,6 @@ const sampleFeed = `<?xml version="1.0" encoding="UTF-8" ?>
 
 func TestScanBlogRSS(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
 		if _, writeErr := w.Write([]byte(sampleFeed)); writeErr != nil {
 			http.Error(w, writeErr.Error(), http.StatusInternalServerError)
 			return
@@ -62,7 +61,6 @@ func TestScanBlogScraperFallback(t *testing.T) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
 		if _, writeErr := w.Write([]byte(html)); writeErr != nil {
 			http.Error(w, writeErr.Error(), http.StatusInternalServerError)
 			return
@@ -88,7 +86,6 @@ func TestScanBlogScraperFallback(t *testing.T) {
 
 func TestScanAllBlogsConcurrent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
 		if _, writeErr := w.Write([]byte(sampleFeed)); writeErr != nil {
 			http.Error(w, writeErr.Error(), http.StatusInternalServerError)
 			return
@@ -119,7 +116,6 @@ func openTestDB(t *testing.T) *storage.Database {
 
 func TestScanBlogRespectsExistingArticles(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
 		if _, writeErr := w.Write([]byte(sampleFeed)); writeErr != nil {
 			http.Error(w, writeErr.Error(), http.StatusInternalServerError)
 			return
