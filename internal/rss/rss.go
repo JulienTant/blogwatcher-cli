@@ -82,11 +82,11 @@ func (f *Fetcher) ParseFeed(ctx context.Context, feedURL string) ([]FeedArticle,
 func (f *Fetcher) DiscoverFeedURL(ctx context.Context, blogURL string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, blogURL, nil)
 	if err != nil {
-		return "", nil
+		return "", fmt.Errorf("discover feed: %w", err)
 	}
 	response, err := f.client.Do(req)
 	if err != nil {
-		return "", nil
+		return "", fmt.Errorf("discover feed: %w", err)
 	}
 	defer func() {
 		if err := response.Body.Close(); err != nil {
@@ -94,17 +94,18 @@ func (f *Fetcher) DiscoverFeedURL(ctx context.Context, blogURL string) (string, 
 		}
 	}()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		// Not-found / bad status is not an error — just means no feed at this URL.
 		return "", nil
 	}
 
 	base, err := url.Parse(blogURL)
 	if err != nil {
-		return "", nil
+		return "", fmt.Errorf("discover feed: %w", err)
 	}
 
 	doc, err := goquery.NewDocumentFromReader(response.Body)
 	if err != nil {
-		return "", nil
+		return "", fmt.Errorf("discover feed: parse HTML: %w", err)
 	}
 
 	feedTypes := []string{

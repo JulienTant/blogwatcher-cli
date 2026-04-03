@@ -6,6 +6,8 @@ import (
 	"os"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/JulienTant/blogwatcher-cli/internal/model"
 	"github.com/JulienTant/blogwatcher-cli/internal/rss"
 	"github.com/JulienTant/blogwatcher-cli/internal/scraper"
@@ -152,14 +154,14 @@ func (s *Scanner) ScanAllBlogs(ctx context.Context, db *storage.Database, worker
 	}
 	jobs := make(chan job)
 	results := make([]ScanResult, len(blogs))
-	errs := make(chan error, workers)
+
+	g, gctx := errgroup.WithContext(ctx)
 
 	for i := 0; i < workers; i++ {
-		go func() {
-			workerDB, err := storage.OpenDatabase(ctx, db.Path())
+		g.Go(func() error {
+			workerDB, err := storage.OpenDatabase(gctx, db.Path())
 			if err != nil {
-				errs <- err
-				return
+				return err
 			}
 			defer func() {
 				if err := workerDB.Close(); err != nil {
@@ -167,26 +169,30 @@ func (s *Scanner) ScanAllBlogs(ctx context.Context, db *storage.Database, worker
 				}
 			}()
 			for item := range jobs {
-				result, err := s.ScanBlog(ctx, workerDB, item.Blog)
+				result, err := s.ScanBlog(gctx, workerDB, item.Blog)
 				if err != nil {
-					errs <- fmt.Errorf("scan %s: %w", item.Blog.Name, err)
-					return
+					return fmt.Errorf("scan %s: %w", item.Blog.Name, err)
 				}
 				results[item.Index] = result
 			}
-			errs <- nil
-		}()
+			return nil
+		})
 	}
 
-	for index, blog := range blogs {
-		jobs <- job{Index: index, Blog: blog}
-	}
-	close(jobs)
-
-	for i := 0; i < workers; i++ {
-		if err := <-errs; err != nil {
-			return nil, err
+	g.Go(func() error {
+		defer close(jobs)
+		for index, blog := range blogs {
+			select {
+			case jobs <- job{Index: index, Blog: blog}:
+			case <-gctx.Done():
+				return gctx.Err()
+			}
 		}
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
 
 	return results, nil

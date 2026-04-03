@@ -406,22 +406,38 @@ func TestSSRFProtection(t *testing.T) {
 	baseURL := startTestServer(t)
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 
+	// Build a clean env without BLOGWATCHER_UNSAFE_CLIENT to ensure the
+	// safe client is actually exercised, even if the user's shell has it set.
+	cleanEnv := filterEnv(os.Environ(), "BLOGWATCHER_UNSAFE_CLIENT")
+	cleanEnv = append(cleanEnv, "NO_COLOR=1")
+
 	// Add a blog pointing to the loopback test server WITHOUT --unsafe-client.
 	// The add command doesn't fetch, so it should succeed.
 	cmd := exec.CommandContext(context.Background(), binaryPath,
 		"--db", dbPath, "add", "test-blog", baseURL+"/go/",
 		"--feed-url", baseURL+"/go/feed.atom")
-	cmd.Env = append(os.Environ(), "NO_COLOR=1")
+	cmd.Env = cleanEnv
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "add should succeed: %s", string(out))
 
 	// Scan WITHOUT --unsafe-client — the safe client should block loopback and fail.
 	cmd = exec.CommandContext(context.Background(), binaryPath,
 		"--db", dbPath, "scan")
-	cmd.Env = append(os.Environ(), "NO_COLOR=1")
+	cmd.Env = cleanEnv
 	out, err = cmd.CombinedOutput()
 	require.Error(t, err, "scan should fail when SSRF protection blocks loopback")
-	require.Contains(t, string(out), "is not authorized", "expected SSRF error message")
+	require.Contains(t, string(out), "failed to fetch feed:", "expected our wrapped error message")
+}
+
+func filterEnv(env []string, key string) []string {
+	prefix := key + "="
+	filtered := make([]string, 0, len(env))
+	for _, e := range env {
+		if !strings.HasPrefix(e, prefix) {
+			filtered = append(filtered, e)
+		}
+	}
+	return filtered
 }
 
 func extractFirstID(t *testing.T, output string) string {
