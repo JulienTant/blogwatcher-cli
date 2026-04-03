@@ -15,8 +15,6 @@ jobs:
 
       - name: Set up mise
         uses: jdx/mise-action@v4
-        with:
-          experimental: true
 
       - name: Lint
         run: golangci-lint run

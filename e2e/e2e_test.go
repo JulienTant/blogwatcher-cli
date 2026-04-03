@@ -25,12 +25,6 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "create temp dir: %v\n", err)
 		os.Exit(1)
 	}
-	defer func() {
-		if err := os.RemoveAll(tmp); err != nil {
-			fmt.Fprintf(os.Stderr, "cleanup temp dir: %v\n", err)
-		}
-	}()
-
 	binaryPath = filepath.Join(tmp, "blogwatcher-cli")
 	cmd := exec.Command("go", "build", "-o", binaryPath, "../cmd/blogwatcher-cli")
 	cmd.Stdout = os.Stdout
@@ -40,7 +34,11 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
-	os.Exit(m.Run())
+	code := m.Run()
+	if err := os.RemoveAll(tmp); err != nil {
+		fmt.Fprintf(os.Stderr, "cleanup temp dir: %v\n", err)
+	}
+	os.Exit(code)
 }
 
 // cliOpts builds args and env depending on the config mode ("flags" or "env").
