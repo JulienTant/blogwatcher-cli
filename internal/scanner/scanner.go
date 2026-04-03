@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/JulienTant/blogwatcher/internal/model"
-	"github.com/JulienTant/blogwatcher/internal/rss"
-	"github.com/JulienTant/blogwatcher/internal/scraper"
-	"github.com/JulienTant/blogwatcher/internal/storage"
+	"github.com/JulienTant/blogwatcher-cli/internal/model"
+	"github.com/JulienTant/blogwatcher-cli/internal/rss"
+	"github.com/JulienTant/blogwatcher-cli/internal/scraper"
+	"github.com/JulienTant/blogwatcher-cli/internal/storage"
 )
 
 type ScanResult struct {

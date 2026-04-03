@@ -17,13 +17,13 @@ A Go CLI tool to track blog articles, detect new posts, and manage read/unread s
 
 ```bash
 # Homebrew (Linux)
-brew install JulienTant/tap/blogwatcher
+brew install JulienTant/tap/blogwatcher-cli
 
 # Install the CLI
-go install github.com/JulienTant/blogwatcher/cmd/blogwatcher@latest
+go install github.com/JulienTant/blogwatcher-cli/cmd/blogwatcher-cli@latest
 
 # Or build locally
-go build ./cmd/blogwatcher
+go build ./cmd/blogwatcher-cli
 ```
 
 Windows and Linux binaries are also available on the GitHub Releases page.
@@ -34,65 +34,65 @@ Windows and Linux binaries are also available on the GitHub Releases page.
 
 ```bash
 # Add a blog (auto-discovers RSS feed)
-blogwatcher add "My Favorite Blog" https://example.com/blog
+blogwatcher-cli add "My Favorite Blog" https://example.com/blog
 
 # Add with explicit feed URL
-blogwatcher add "Tech Blog" https://techblog.com --feed-url https://techblog.com/rss.xml
+blogwatcher-cli add "Tech Blog" https://techblog.com --feed-url https://techblog.com/rss.xml
 
 # Add with HTML scraping selector (for blogs without feeds)
-blogwatcher add "No-RSS Blog" https://norss.com --scrape-selector "article h2 a"
+blogwatcher-cli add "No-RSS Blog" https://norss.com --scrape-selector "article h2 a"
 ```
 
 ### Managing Blogs
 
 ```bash
 # List all tracked blogs
-blogwatcher blogs
+blogwatcher-cli blogs
 
 # Remove a blog (and all its articles)
-blogwatcher remove "My Favorite Blog"
+blogwatcher-cli remove "My Favorite Blog"
 
 # Remove without confirmation
-blogwatcher remove "My Favorite Blog" -y
+blogwatcher-cli remove "My Favorite Blog" -y
 ```
 
 ### Scanning for New Articles
 
 ```bash
 # Scan all blogs for new articles
-blogwatcher scan
+blogwatcher-cli scan
 
 # Scan a specific blog
-blogwatcher scan "Tech Blog"
+blogwatcher-cli scan "Tech Blog"
 ```
 
 ### Viewing Articles
 
 ```bash
 # List unread articles
-blogwatcher articles
+blogwatcher-cli articles
 
 # List all articles (including read)
-blogwatcher articles --all
+blogwatcher-cli articles --all
 
 # List articles from a specific blog
-blogwatcher articles --blog "Tech Blog"
+blogwatcher-cli articles --blog "Tech Blog"
 ```
 
 ### Managing Read Status
 
 ```bash
 # Mark an article as read (use article ID from articles list)
-blogwatcher read 42
+blogwatcher-cli read 42
 
 # Mark an article as unread
-blogwatcher unread 42
+blogwatcher-cli unread 42
 
 # Mark all unread articles as read
-blogwatcher read-all
+blogwatcher-cli read-all
 
 # Mark all unread articles as read for a blog (skip prompt)
-blogwatcher read-all --blog "Tech Blog" --yes
+blogwatcher-cli read-all --blog "Tech Blog" --yes
 ```
 
 ## How It Works
@@ -125,7 +125,15 @@ When RSS isn't available, provide a CSS selector that matches article links:
 
 ## Database
 
-BlogWatcher stores data in SQLite at `~/.blogwatcher/blogwatcher.db`:
+BlogWatcher stores data in SQLite at `~/.blogwatcher-cli/blogwatcher-cli.db`.
+
+If upgrading from the original `blogwatcher`, migrate your existing database:
+
+```bash
+mv ~/.blogwatcher/blogwatcher.db ~/.blogwatcher-cli/blogwatcher-cli.db
+```
+
+Tables:
 
 -   **blogs** - Tracked blogs (name, URL, feed URL, scrape selector)
 -   **articles** - Discovered articles (title, URL, dates, read status)

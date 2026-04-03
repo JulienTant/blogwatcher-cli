@@ -5,14 +5,14 @@ import (
 	"os"
 	"strings"
 
-	"github.com/JulienTant/blogwatcher/internal/version"
+	"github.com/JulienTant/blogwatcher-cli/internal/version"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 func NewRootCommand() *cobra.Command {
 	rootCmd := &cobra.Command{
-		Use:           "blogwatcher",
+		Use:           "blogwatcher-cli",
 		Short:         "BlogWatcher - Track blog articles and detect new posts.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -23,7 +23,7 @@ func NewRootCommand() *cobra.Command {
 	rootCmd.Version = version.Version
 	rootCmd.SetVersionTemplate("{{.Version}}\n")
 
-	rootCmd.PersistentFlags().String("db", "", "Path to the SQLite database file (default: ~/.blogwatcher/blogwatcher.db)")
+	rootCmd.PersistentFlags().String("db", "", "Path to the SQLite database file (default: ~/.blogwatcher-cli/blogwatcher-cli.db)")
 
 	rootCmd.AddCommand(newAddCommand())
 	rootCmd.AddCommand(newRemoveCommand())

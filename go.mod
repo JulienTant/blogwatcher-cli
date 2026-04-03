@@ -1,4 +1,4 @@
-module github.com/JulienTant/blogwatcher
+module github.com/JulienTant/blogwatcher-cli
 
 go 1.24.0
 
