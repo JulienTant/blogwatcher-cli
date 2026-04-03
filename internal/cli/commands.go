@@ -379,6 +379,42 @@ func newUnreadCommand() *cobra.Command {
 	return cmd
 }
 
+func newImportCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "import <file>",
+		Short: "Import blogs from an OPML file.",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			f, err := os.Open(args[0])
+			if err != nil {
+				return err
+			}
+			defer func() {
+				if err := f.Close(); err != nil {
+					fmt.Fprintf(os.Stderr, "close file: %v\n", err)
+				}
+			}()
+			db, err := storage.OpenDatabase(cmd.Context(), viper.GetString("db"))
+			if err != nil {
+				return err
+			}
+			defer func() {
+				if err := db.Close(); err != nil {
+					fmt.Fprintf(os.Stderr, "close db: %v\n", err)
+				}
+			}()
+			added, skipped, err := controller.ImportOPML(cmd.Context(), db, f)
+			if err != nil {
+				printError(err)
+				return markError(err)
+			}
+			cprintf([]color.Attribute{color.FgGreen}, "Imported %d blog(s), skipped %d duplicate(s)\n", added, skipped)
+			return nil
+		},
+	}
+	return cmd
+}
+
 func printScanResult(result scanner.ScanResult) {
 	statusColor := []color.Attribute{color.FgWhite}
 	if result.NewArticles > 0 {
