@@ -11,7 +11,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/JulienTant/blogwatcher/internal/model"
+	"github.com/JulienTant/blogwatcher-cli/internal/model"
 )
 
 const sqliteTimeLayout = time.RFC3339Nano
@@ -21,7 +21,7 @@ func DefaultDBPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".blogwatcher", "blogwatcher.db"), nil
+	return filepath.Join(home, ".blogwatcher-cli", "blogwatcher-cli.db"), nil
 }
 
 type Database struct {

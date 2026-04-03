@@ -1,11 +1,11 @@
 version: 2
 
-project_name: blogwatcher
+project_name: blogwatcher-cli
 
 builds:
-  - id: blogwatcher
-    main: ./cmd/blogwatcher
-    binary: blogwatcher
+  - id: blogwatcher-cli
+    main: ./cmd/blogwatcher-cli
+    binary: blogwatcher-cli
     env:
       - CGO_ENABLED=1
     goos:
@@ -13,12 +13,12 @@ builds:
     goarch:
       - amd64
     ldflags:
-      - -s -w -X github.com/JulienTant/blogwatcher/internal/version.Version={{.Version}}
+      - -s -w -X github.com/JulienTant/blogwatcher-cli-cli/internal/version.Version={{.Version}}
 
 archives:
-  - id: blogwatcher
+  - id: blogwatcher-cli
     builds:
-      - blogwatcher
+      - blogwatcher-cli
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     format: tar.gz
     format_overrides:
@@ -36,15 +36,15 @@ changelog:
       - '^test:'
 
 # brews:
-#   - name: blogwatcher
+#   - name: blogwatcher-cli
 #     description: "Track blog articles and detect new posts."
-#     homepage: "https://github.com/JulienTant/blogwatcher"
+#     homepage: "https://github.com/JulienTant/blogwatcher-cli-cli"
 #     license: "MIT"
 #     repository:
 #       owner: JulienTant
 #       name: homebrew-tap
 #       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
 #     install: |
-#       bin.install "blogwatcher"
+#       bin.install "blogwatcher-cli"
 #     test: |
-#       system "#{bin}/blogwatcher", "--version"
+#       system "#{bin}/blogwatcher-cli", "--version"

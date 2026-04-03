@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/JulienTant/blogwatcher/internal/model"
+	"github.com/JulienTant/blogwatcher-cli/internal/model"
 )
 
 func TestDatabaseCreatesFileAndCRUD(t *testing.T) {

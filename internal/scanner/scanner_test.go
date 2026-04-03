@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/JulienTant/blogwatcher/internal/model"
-	"github.com/JulienTant/blogwatcher/internal/storage"
+	"github.com/JulienTant/blogwatcher-cli/internal/model"
+	"github.com/JulienTant/blogwatcher-cli/internal/storage"
 )
 
 const sampleFeed = `<?xml version="1.0" encoding="UTF-8" ?>

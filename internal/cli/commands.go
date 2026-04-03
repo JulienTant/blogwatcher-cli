@@ -12,10 +12,10 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/JulienTant/blogwatcher/internal/controller"
-	"github.com/JulienTant/blogwatcher/internal/model"
-	"github.com/JulienTant/blogwatcher/internal/scanner"
-	"github.com/JulienTant/blogwatcher/internal/storage"
+	"github.com/JulienTant/blogwatcher-cli/internal/controller"
+	"github.com/JulienTant/blogwatcher-cli/internal/model"
+	"github.com/JulienTant/blogwatcher-cli/internal/scanner"
+	"github.com/JulienTant/blogwatcher-cli/internal/storage"
 )
 
 func newAddCommand() *cobra.Command {
@@ -93,7 +93,7 @@ func newBlogsCommand() *cobra.Command {
 				return err
 			}
 			if len(blogs) == 0 {
-				fmt.Println("No blogs tracked yet. Use 'blogwatcher add' to add one.")
+				fmt.Println("No blogs tracked yet. Use 'blogwatcher-cli add' to add one.")
 				return nil
 			}
 			color.New(color.FgCyan, color.Bold).Printf("Tracked blogs (%d):\n\n", len(blogs))
@@ -151,7 +151,7 @@ func newScanCommand() *cobra.Command {
 					return err
 				}
 				if len(blogs) == 0 {
-					fmt.Println("No blogs tracked yet. Use 'blogwatcher add' to add one.")
+					fmt.Println("No blogs tracked yet. Use 'blogwatcher-cli add' to add one.")
 					return nil
 				}
 				if !silent {
