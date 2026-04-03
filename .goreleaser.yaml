@@ -7,11 +7,14 @@ builds:
     main: ./cmd/blogwatcher-cli
     binary: blogwatcher-cli
     env:
-      - CGO_ENABLED=1
+      - CGO_ENABLED=0
     goos:
       - linux
+      - darwin
+      - windows
     goarch:
       - amd64
+      - arm64
     ldflags:
       - -s -w -X github.com/JulienTant/blogwatcher-cli/internal/version.Version={{.Version}}
 
@@ -35,16 +38,28 @@ changelog:
       - '^docs:'
       - '^test:'
 
-# brews:
-#   - name: blogwatcher-cli
-#     description: "Track blog articles and detect new posts."
-#     homepage: "https://github.com/JulienTant/blogwatcher-cli"
-#     license: "MIT"
-#     repository:
-#       owner: JulienTant
-#       name: homebrew-tap
-#       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-#     install: |
-#       bin.install "blogwatcher-cli"
-#     test: |
-#       system "#{bin}/blogwatcher-cli", "--version"
+dockers:
+  - image_templates:
+      - "ghcr.io/julientant/blogwatcher-cli:{{ .Version }}-amd64"
+    use: buildx
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--platform=linux/amd64"
+    goarch: amd64
+  - image_templates:
+      - "ghcr.io/julientant/blogwatcher-cli:{{ .Version }}-arm64"
+    use: buildx
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--platform=linux/arm64"
+    goarch: arm64
+
+docker_manifests:
+  - name_template: "ghcr.io/julientant/blogwatcher-cli:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/julientant/blogwatcher-cli:{{ .Version }}-amd64"
+      - "ghcr.io/julientant/blogwatcher-cli:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/julientant/blogwatcher-cli:latest"
+    image_templates:
+      - "ghcr.io/julientant/blogwatcher-cli:{{ .Version }}-amd64"
+      - "ghcr.io/julientant/blogwatcher-cli:{{ .Version }}-arm64"

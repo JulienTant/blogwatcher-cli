@@ -1,0 +1,10 @@
+.git
+.github
+.claude
+*.md
+LICENSE
+Dockerfile
+.dockerignore
+.goreleaser.yaml
+.golangci.yml
+mise.toml
