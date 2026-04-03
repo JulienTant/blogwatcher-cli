@@ -35,16 +35,16 @@ changelog:
       - '^docs:'
       - '^test:'
 
-brews:
-  - name: blogwatcher
-    description: "Track blog articles and detect new posts."
-    homepage: "https://github.com/JulienTant/blogwatcher"
-    license: "MIT"
-    repository:
-      owner: JulienTant
-      name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    install: |
-      bin.install "blogwatcher"
-    test: |
-      system "#{bin}/blogwatcher", "--version"
+# brews:
+#   - name: blogwatcher
+#     description: "Track blog articles and detect new posts."
+#     homepage: "https://github.com/JulienTant/blogwatcher"
+#     license: "MIT"
+#     repository:
+#       owner: JulienTant
+#       name: homebrew-tap
+#       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+#     install: |
+#       bin.install "blogwatcher"
+#     test: |
+#       system "#{bin}/blogwatcher", "--version"
