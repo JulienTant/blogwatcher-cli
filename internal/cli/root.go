@@ -16,14 +16,14 @@ func NewRootCommand() *cobra.Command {
 		Short:         "BlogWatcher - Track blog articles and detect new posts.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			return initConfig(cmd)
+		},
 	}
 	rootCmd.Version = version.Version
 	rootCmd.SetVersionTemplate("{{.Version}}\n")
 
 	rootCmd.PersistentFlags().String("db", "", "Path to the SQLite database file (default: ~/.blogwatcher/blogwatcher.db)")
-
-	cobra.OnInitialize(initConfig)
-	viper.BindPFlags(rootCmd.PersistentFlags())
 
 	rootCmd.AddCommand(newAddCommand())
 	rootCmd.AddCommand(newRemoveCommand())
@@ -36,10 +36,11 @@ func NewRootCommand() *cobra.Command {
 	return rootCmd
 }
 
-func initConfig() {
+func initConfig(cmd *cobra.Command) error {
 	viper.SetEnvPrefix("BLOGWATCHER")
 	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
 	viper.AutomaticEnv()
+	return viper.BindPFlags(cmd.Flags())
 }
 
 func Execute() {

@@ -42,7 +42,6 @@ func newAddCommand() *cobra.Command {
 	}
 	cmd.Flags().String("feed-url", "", "RSS/Atom feed URL (auto-discovered if not provided)")
 	cmd.Flags().String("scrape-selector", "", "CSS selector for HTML scraping fallback")
-	viper.BindPFlags(cmd.Flags())
 	return cmd
 }
 
@@ -76,7 +75,6 @@ func newRemoveCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolP("yes", "y", false, "Skip confirmation prompt")
-	viper.BindPFlags(cmd.Flags())
 	return cmd
 }
 
@@ -188,7 +186,6 @@ func newScanCommand() *cobra.Command {
 	}
 	cmd.Flags().BoolP("silent", "s", false, "Only output 'scan done' when complete")
 	cmd.Flags().IntP("workers", "w", 8, "Number of concurrent workers when scanning all blogs")
-	viper.BindPFlags(cmd.Flags())
 	return cmd
 }
 
@@ -232,7 +229,6 @@ func newArticlesCommand() *cobra.Command {
 
 	cmd.Flags().BoolP("all", "a", false, "Show all articles (including read)")
 	cmd.Flags().StringP("blog", "b", "", "Filter by blog name")
-	viper.BindPFlags(cmd.Flags())
 	return cmd
 }
 
@@ -318,7 +314,6 @@ func newReadAllCommand() *cobra.Command {
 
 	cmd.Flags().StringP("blog", "b", "", "Only mark articles from this blog")
 	cmd.Flags().BoolP("yes", "y", false, "Skip confirmation prompt")
-	viper.BindPFlags(cmd.Flags())
 	return cmd
 }
 
