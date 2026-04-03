@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
@@ -89,6 +90,16 @@ func DiscoverFeedURL(ctx context.Context, blogURL string, timeout time.Duration)
 		return "", nil
 	}
 
+	// If the URL already returns a feed content-type, return it directly.
+	contentType := response.Header.Get("Content-Type")
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err == nil {
+		// Only accept explicit feed types, not generic XML (to avoid sitemap false positives).
+		if mediaType == "application/rss+xml" || mediaType == "application/atom+xml" || mediaType == "application/feed+json" {
+			return blogURL, nil
+		}
+	}
+
 	base, err := url.Parse(blogURL)
 	if err != nil {
 		return "", nil
@@ -109,6 +120,10 @@ func DiscoverFeedURL(ctx context.Context, blogURL string, timeout time.Duration)
 
 	for _, feedType := range feedTypes {
 		selection := doc.Find(fmt.Sprintf("link[rel='alternate'][type='%s']", feedType)).First()
+		if selection.Length() == 0 {
+			// Also check rel="self" for feeds that use self-referencing links.
+			selection = doc.Find(fmt.Sprintf("link[rel='self'][type='%s']", feedType)).First()
+		}
 		if selection.Length() == 0 {
 			continue
 		}
