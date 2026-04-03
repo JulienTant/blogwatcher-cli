@@ -11,7 +11,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/Hyaxia/blogwatcher/internal/model"
+	"github.com/JulienTant/blogwatcher/internal/model"
 )
 
 const sqliteTimeLayout = time.RFC3339Nano

@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Hyaxia/blogwatcher/internal/model"
-	"github.com/Hyaxia/blogwatcher/internal/storage"
+	"github.com/JulienTant/blogwatcher/internal/model"
+	"github.com/JulienTant/blogwatcher/internal/storage"
 )
 
 func TestAddBlogAndRemoveBlog(t *testing.T) {

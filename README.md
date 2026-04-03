@@ -1,5 +1,7 @@
 # BlogWatcher
 
+Fork of [Hyaxia/blogwatcher](https://github.com/Hyaxia/blogwatcher).
+
 A Go CLI tool to track blog articles, detect new posts, and manage read/unread status. Supports both RSS/Atom feeds and HTML scraping as fallback.
 
 ## Features
@@ -15,10 +17,10 @@ A Go CLI tool to track blog articles, detect new posts, and manage read/unread s
 
 ```bash
 # Homebrew (Linux)
-brew install Hyaxia/tap/blogwatcher
+brew install JulienTant/tap/blogwatcher
 
 # Install the CLI
-go install github.com/Hyaxia/blogwatcher/cmd/blogwatcher@latest
+go install github.com/JulienTant/blogwatcher/cmd/blogwatcher@latest
 
 # Or build locally
 go build ./cmd/blogwatcher

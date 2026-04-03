@@ -10,17 +10,15 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
-	"github.com/Hyaxia/blogwatcher/internal/controller"
-	"github.com/Hyaxia/blogwatcher/internal/model"
-	"github.com/Hyaxia/blogwatcher/internal/scanner"
-	"github.com/Hyaxia/blogwatcher/internal/storage"
+	"github.com/JulienTant/blogwatcher/internal/controller"
+	"github.com/JulienTant/blogwatcher/internal/model"
+	"github.com/JulienTant/blogwatcher/internal/scanner"
+	"github.com/JulienTant/blogwatcher/internal/storage"
 )
 
 func newAddCommand() *cobra.Command {
-	var feedURL string
-	var scrapeSelector string
-
 	cmd := &cobra.Command{
 		Use:   "add <name> <url>",
 		Short: "Add a new blog to track.",
@@ -28,12 +26,12 @@ func newAddCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
 			url := args[1]
-			db, err := storage.OpenDatabase("")
+			db, err := storage.OpenDatabase(viper.GetString("db"))
 			if err != nil {
 				return err
 			}
 			defer db.Close()
-			_, err = controller.AddBlog(db, name, url, feedURL, scrapeSelector)
+			_, err = controller.AddBlog(db, name, url, viper.GetString("feed-url"), viper.GetString("scrape-selector"))
 			if err != nil {
 				printError(err)
 				return markError(err)
@@ -42,20 +40,19 @@ func newAddCommand() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&feedURL, "feed-url", "", "RSS/Atom feed URL (auto-discovered if not provided)")
-	cmd.Flags().StringVar(&scrapeSelector, "scrape-selector", "", "CSS selector for HTML scraping fallback")
+	cmd.Flags().String("feed-url", "", "RSS/Atom feed URL (auto-discovered if not provided)")
+	cmd.Flags().String("scrape-selector", "", "CSS selector for HTML scraping fallback")
 	return cmd
 }
 
 func newRemoveCommand() *cobra.Command {
-	var yes bool
 	cmd := &cobra.Command{
 		Use:   "remove <name>",
 		Short: "Remove a blog from tracking.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
-			if !yes {
+			if !viper.GetBool("yes") {
 				confirmed, err := confirm(fmt.Sprintf("Remove blog '%s' and all its articles?", name))
 				if err != nil {
 					return err
@@ -64,7 +61,7 @@ func newRemoveCommand() *cobra.Command {
 					return nil
 				}
 			}
-			db, err := storage.OpenDatabase("")
+			db, err := storage.OpenDatabase(viper.GetString("db"))
 			if err != nil {
 				return err
 			}
@@ -77,7 +74,7 @@ func newRemoveCommand() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation prompt")
+	cmd.Flags().BoolP("yes", "y", false, "Skip confirmation prompt")
 	return cmd
 }
 
@@ -86,7 +83,7 @@ func newBlogsCommand() *cobra.Command {
 		Use:   "blogs",
 		Short: "List all tracked blogs.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			db, err := storage.OpenDatabase("")
+			db, err := storage.OpenDatabase(viper.GetString("db"))
 			if err != nil {
 				return err
 			}
@@ -121,15 +118,15 @@ func newBlogsCommand() *cobra.Command {
 }
 
 func newScanCommand() *cobra.Command {
-	var silent bool
-	var workers int
-
 	cmd := &cobra.Command{
 		Use:   "scan [blog_name]",
 		Short: "Scan blogs for new articles.",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			db, err := storage.OpenDatabase("")
+			silent := viper.GetBool("silent")
+			workers := viper.GetInt("workers")
+
+			db, err := storage.OpenDatabase(viper.GetString("db"))
 			if err != nil {
 				return err
 			}
@@ -187,25 +184,24 @@ func newScanCommand() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().BoolVarP(&silent, "silent", "s", false, "Only output 'scan done' when complete")
-	cmd.Flags().IntVarP(&workers, "workers", "w", 8, "Number of concurrent workers when scanning all blogs")
+	cmd.Flags().BoolP("silent", "s", false, "Only output 'scan done' when complete")
+	cmd.Flags().IntP("workers", "w", 8, "Number of concurrent workers when scanning all blogs")
 	return cmd
 }
 
 func newArticlesCommand() *cobra.Command {
-	var showAll bool
-	var blogName string
-
 	cmd := &cobra.Command{
 		Use:   "articles",
 		Short: "List articles.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			db, err := storage.OpenDatabase("")
+			showAll := viper.GetBool("all")
+
+			db, err := storage.OpenDatabase(viper.GetString("db"))
 			if err != nil {
 				return err
 			}
 			defer db.Close()
-			articles, blogNames, err := controller.GetArticles(db, showAll, blogName)
+			articles, blogNames, err := controller.GetArticles(db, showAll, viper.GetString("blog"))
 			if err != nil {
 				printError(err)
 				return markError(err)
@@ -231,8 +227,8 @@ func newArticlesCommand() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().BoolVarP(&showAll, "all", "a", false, "Show all articles (including read)")
-	cmd.Flags().StringVarP(&blogName, "blog", "b", "", "Filter by blog name")
+	cmd.Flags().BoolP("all", "a", false, "Show all articles (including read)")
+	cmd.Flags().StringP("blog", "b", "", "Filter by blog name")
 	return cmd
 }
 
@@ -246,7 +242,7 @@ func newReadCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			db, err := storage.OpenDatabase("")
+			db, err := storage.OpenDatabase(viper.GetString("db"))
 			if err != nil {
 				return err
 			}
@@ -268,14 +264,13 @@ func newReadCommand() *cobra.Command {
 }
 
 func newReadAllCommand() *cobra.Command {
-	var blogName string
-	var yes bool
-
 	cmd := &cobra.Command{
 		Use:   "read-all",
 		Short: "Mark all unread articles as read.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			db, err := storage.OpenDatabase("")
+			blogName := viper.GetString("blog")
+
+			db, err := storage.OpenDatabase(viper.GetString("db"))
 			if err != nil {
 				return err
 			}
@@ -291,7 +286,7 @@ func newReadAllCommand() *cobra.Command {
 				return nil
 			}
 
-			if !yes {
+			if !viper.GetBool("yes") {
 				scope := "all blogs"
 				if blogName != "" {
 					scope = fmt.Sprintf("from '%s'", blogName)
@@ -317,8 +312,8 @@ func newReadAllCommand() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&blogName, "blog", "b", "", "Only mark articles from this blog")
-	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation prompt")
+	cmd.Flags().StringP("blog", "b", "", "Only mark articles from this blog")
+	cmd.Flags().BoolP("yes", "y", false, "Skip confirmation prompt")
 	return cmd
 }
 
@@ -332,7 +327,7 @@ func newUnreadCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			db, err := storage.OpenDatabase("")
+			db, err := storage.OpenDatabase(viper.GetString("db"))
 			if err != nil {
 				return err
 			}
