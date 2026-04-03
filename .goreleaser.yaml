@@ -7,23 +7,28 @@ builds:
     main: ./cmd/blogwatcher-cli
     binary: blogwatcher-cli
     env:
-      - CGO_ENABLED=1
+      - CGO_ENABLED=0
     goos:
       - linux
+      - darwin
+      - windows
     goarch:
       - amd64
+      - arm64
     ldflags:
       - -s -w -X github.com/JulienTant/blogwatcher-cli/internal/version.Version={{.Version}}
 
 archives:
   - id: blogwatcher-cli
-    builds:
+    ids:
       - blogwatcher-cli
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    format: tar.gz
+    formats:
+      - tar.gz
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
 
 checksum:
   name_template: "{{ .ProjectName }}_checksums.txt"
@@ -35,16 +40,20 @@ changelog:
       - '^docs:'
       - '^test:'
 
-# brews:
-#   - name: blogwatcher-cli
-#     description: "Track blog articles and detect new posts."
-#     homepage: "https://github.com/JulienTant/blogwatcher-cli"
-#     license: "MIT"
-#     repository:
-#       owner: JulienTant
-#       name: homebrew-tap
-#       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-#     install: |
-#       bin.install "blogwatcher-cli"
-#     test: |
-#       system "#{bin}/blogwatcher-cli", "--version"
+snapshot:
+  version_template: "main"
+
+dockers_v2:
+  - ids:
+      - blogwatcher-cli
+    images:
+      - "ghcr.io/julientant/blogwatcher-cli"
+    tags:
+      - "{{ .Version }}"
+      - "{{ if not .IsSnapshot }}latest{{ end }}"
+    dockerfile: Dockerfile
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    flags:
+      - "--target=release"
