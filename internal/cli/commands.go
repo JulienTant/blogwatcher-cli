@@ -53,7 +53,11 @@ func newRemoveCommand() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
-			if !viper.GetBool("yes") {
+			yes, err := cmd.Flags().GetBool("yes")
+			if err != nil {
+				return err
+			}
+			if !yes {
 				confirmed, err := confirm(fmt.Sprintf("Remove blog '%s' and all its articles?", name))
 				if err != nil {
 					return err
@@ -197,14 +201,21 @@ func newArticlesCommand() *cobra.Command {
 		Use:   "articles",
 		Short: "List articles.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			showAll := viper.GetBool("all")
+			showAll, err := cmd.Flags().GetBool("all")
+			if err != nil {
+				return err
+			}
+			blogName, err := cmd.Flags().GetString("blog")
+			if err != nil {
+				return err
+			}
 
 			db, err := storage.OpenDatabase(viper.GetString("db"))
 			if err != nil {
 				return err
 			}
 			defer db.Close()
-			articles, blogNames, err := controller.GetArticles(db, showAll, viper.GetString("blog"))
+			articles, blogNames, err := controller.GetArticles(db, showAll, blogName)
 			if err != nil {
 				printError(err)
 				return markError(err)
@@ -272,7 +283,10 @@ func newReadAllCommand() *cobra.Command {
 		Use:   "read-all",
 		Short: "Mark all unread articles as read.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			blogName := viper.GetString("blog")
+			blogName, err := cmd.Flags().GetString("blog")
+			if err != nil {
+				return err
+			}
 
 			db, err := storage.OpenDatabase(viper.GetString("db"))
 			if err != nil {
@@ -290,7 +304,11 @@ func newReadAllCommand() *cobra.Command {
 				return nil
 			}
 
-			if !viper.GetBool("yes") {
+			yes, err := cmd.Flags().GetBool("yes")
+			if err != nil {
+				return err
+			}
+			if !yes {
 				scope := "all blogs"
 				if blogName != "" {
 					scope = fmt.Sprintf("from '%s'", blogName)
