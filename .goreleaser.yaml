@@ -20,13 +20,15 @@ builds:
 
 archives:
   - id: blogwatcher-cli
-    builds:
+    ids:
       - blogwatcher-cli
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    format: tar.gz
+    formats:
+      - tar.gz
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
 
 checksum:
   name_template: "{{ .ProjectName }}_checksums.txt"
@@ -41,28 +43,17 @@ changelog:
 snapshot:
   version_template: "main"
 
-dockers:
-  - image_templates:
-      - "ghcr.io/julientant/blogwatcher-cli:{{ .Version }}-amd64"
-    use: buildx
+dockers_v2:
+  - ids:
+      - blogwatcher-cli
+    images:
+      - "ghcr.io/julientant/blogwatcher-cli"
+    tags:
+      - "{{ .Version }}"
+      - "{{ if not .IsSnapshot }}latest{{ end }}"
     dockerfile: Dockerfile
-    build_flag_templates:
-      - "--platform=linux/amd64"
-    goarch: amd64
-  - image_templates:
-      - "ghcr.io/julientant/blogwatcher-cli:{{ .Version }}-arm64"
-    use: buildx
-    dockerfile: Dockerfile
-    build_flag_templates:
-      - "--platform=linux/arm64"
-    goarch: arm64
-
-docker_manifests:
-  - name_template: "ghcr.io/julientant/blogwatcher-cli:{{ .Version }}"
-    image_templates:
-      - "ghcr.io/julientant/blogwatcher-cli:{{ .Version }}-amd64"
-      - "ghcr.io/julientant/blogwatcher-cli:{{ .Version }}-arm64"
-  - name_template: "ghcr.io/julientant/blogwatcher-cli:latest"
-    image_templates:
-      - "ghcr.io/julientant/blogwatcher-cli:{{ .Version }}-amd64"
-      - "ghcr.io/julientant/blogwatcher-cli:{{ .Version }}-arm64"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    flags:
+      - "--target=release"

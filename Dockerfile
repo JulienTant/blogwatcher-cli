@@ -1,3 +1,17 @@
+FROM alpine:3.21 AS certs
+RUN apk add --no-cache ca-certificates
+
+# --- Pre-built binary (goreleaser: --target=release) ---
+FROM scratch AS release
+ARG TARGETPLATFORM
+COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY ${TARGETPLATFORM}/blogwatcher-cli /blogwatcher-cli
+VOLUME /data
+ENV BLOGWATCHER_DB=/data/blogwatcher-cli.db
+USER 65532:65532
+ENTRYPOINT ["/blogwatcher-cli"]
+
+# --- Build from source (default: docker build .) ---
 FROM alpine:3.21 AS builder
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
@@ -21,7 +35,9 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" -o /blogwatcher-cli ./cmd/blogwatcher-cli
 
 FROM scratch
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /blogwatcher-cli /blogwatcher-cli
+VOLUME /data
+ENV BLOGWATCHER_DB=/data/blogwatcher-cli.db
 USER 65532:65532
 ENTRYPOINT ["/blogwatcher-cli"]
