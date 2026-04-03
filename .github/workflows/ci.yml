@@ -13,19 +13,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Go
-        uses: actions/setup-go@v6
+      - name: Set up mise
+        uses: jdx/mise-action@v4
         with:
-          go-version-file: go.mod
-          cache: true
+          experimental: true
 
       - name: Lint
-        uses: golangci/golangci-lint-action@v8
-        with:
-          version: v2.11.4
+        run: golangci-lint run
 
       - name: Build
         run: go build ./...
 
       - name: Test
-        run: go test ./...
+        run: gotestsum -- ./...
