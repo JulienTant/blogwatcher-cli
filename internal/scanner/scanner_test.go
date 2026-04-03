@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -28,6 +29,7 @@ const sampleFeed = `<?xml version="1.0" encoding="UTF-8" ?>
 </rss>`
 
 func TestScanBlogRSS(t *testing.T) {
+	ctx := context.Background()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, writeErr := w.Write([]byte(sampleFeed)); writeErr != nil {
 			http.Error(w, writeErr.Error(), http.StatusInternalServerError)
@@ -39,19 +41,20 @@ func TestScanBlogRSS(t *testing.T) {
 	db := openTestDB(t)
 	defer func() { require.NoError(t, db.Close()) }()
 
-	blog, err := db.AddBlog(model.Blog{Name: "Test", URL: "https://example.com", FeedURL: server.URL})
+	blog, err := db.AddBlog(ctx, model.Blog{Name: "Test", URL: "https://example.com", FeedURL: server.URL})
 	require.NoError(t, err, "add blog")
 
-	result := ScanBlog(db, blog)
+	result := ScanBlog(ctx, db, blog)
 	require.Equal(t, 2, result.NewArticles)
 	require.Equal(t, "rss", result.Source)
 
-	articles, err := db.ListArticles(false, nil)
+	articles, err := db.ListArticles(ctx, false, nil)
 	require.NoError(t, err, "list articles")
 	require.Len(t, articles, 2)
 }
 
 func TestScanBlogScraperFallback(t *testing.T) {
+	ctx := context.Background()
 	html := `<!DOCTYPE html>
 <html>
 <body>
@@ -75,16 +78,17 @@ func TestScanBlogScraperFallback(t *testing.T) {
 	db := openTestDB(t)
 	defer func() { require.NoError(t, db.Close()) }()
 
-	blog, err := db.AddBlog(model.Blog{Name: "Test", URL: server.URL, FeedURL: server.URL + "/feed.xml", ScrapeSelector: "article h2 a"})
+	blog, err := db.AddBlog(ctx, model.Blog{Name: "Test", URL: server.URL, FeedURL: server.URL + "/feed.xml", ScrapeSelector: "article h2 a"})
 	require.NoError(t, err, "add blog")
 
-	result := ScanBlog(db, blog)
+	result := ScanBlog(ctx, db, blog)
 	require.Equal(t, "scraper", result.Source)
 	require.Equal(t, 1, result.NewArticles)
-	require.Equal(t, "", result.Error)
+	require.Empty(t, result.Error)
 }
 
 func TestScanAllBlogsConcurrent(t *testing.T) {
+	ctx := context.Background()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, writeErr := w.Write([]byte(sampleFeed)); writeErr != nil {
 			http.Error(w, writeErr.Error(), http.StatusInternalServerError)
@@ -97,11 +101,11 @@ func TestScanAllBlogsConcurrent(t *testing.T) {
 	defer func() { require.NoError(t, db.Close()) }()
 
 	for i, name := range []string{"TestA", "TestB"} {
-		_, err := db.AddBlog(model.Blog{Name: name, URL: "https://example.com/" + name, FeedURL: server.URL})
+		_, err := db.AddBlog(ctx, model.Blog{Name: name, URL: "https://example.com/" + name, FeedURL: server.URL})
 		require.NoError(t, err, "add blog %d", i)
 	}
 
-	results, err := ScanAllBlogs(db, 2)
+	results, err := ScanAllBlogs(ctx, db, 2)
 	require.NoError(t, err, "scan all blogs")
 	require.Len(t, results, 2)
 }
@@ -109,12 +113,13 @@ func TestScanAllBlogsConcurrent(t *testing.T) {
 func openTestDB(t *testing.T) *storage.Database {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "blogwatcher-cli.db")
-	db, err := storage.OpenDatabase(path)
+	db, err := storage.OpenDatabase(context.Background(), path)
 	require.NoError(t, err, "open database")
 	return db
 }
 
 func TestScanBlogRespectsExistingArticles(t *testing.T) {
+	ctx := context.Background()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, writeErr := w.Write([]byte(sampleFeed)); writeErr != nil {
 			http.Error(w, writeErr.Error(), http.StatusInternalServerError)
@@ -126,13 +131,13 @@ func TestScanBlogRespectsExistingArticles(t *testing.T) {
 	db := openTestDB(t)
 	defer func() { require.NoError(t, db.Close()) }()
 
-	blog, err := db.AddBlog(model.Blog{Name: "Test", URL: "https://example.com", FeedURL: server.URL})
+	blog, err := db.AddBlog(ctx, model.Blog{Name: "Test", URL: "https://example.com", FeedURL: server.URL})
 	require.NoError(t, err, "add blog")
 
-	_, err = db.AddArticle(model.Article{BlogID: blog.ID, Title: "First", URL: "https://example.com/1", DiscoveredDate: ptrTime(time.Now())})
+	_, err = db.AddArticle(ctx, model.Article{BlogID: blog.ID, Title: "First", URL: "https://example.com/1", DiscoveredDate: ptrTime(time.Now())})
 	require.NoError(t, err, "add article")
 
-	result := ScanBlog(db, blog)
+	result := ScanBlog(ctx, db, blog)
 	require.Equal(t, 1, result.NewArticles)
 }
 

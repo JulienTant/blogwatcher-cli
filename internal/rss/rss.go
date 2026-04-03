@@ -1,6 +1,7 @@
 package rss
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -27,9 +28,13 @@ func (e FeedParseError) Error() string {
 	return e.Message
 }
 
-func ParseFeed(feedURL string, timeout time.Duration) ([]FeedArticle, error) {
+func ParseFeed(ctx context.Context, feedURL string, timeout time.Duration) ([]FeedArticle, error) {
 	client := &http.Client{Timeout: timeout}
-	response, err := client.Get(feedURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, feedURL, nil)
+	if err != nil {
+		return nil, FeedParseError{Message: fmt.Sprintf("failed to create request: %v", err)}
+	}
+	response, err := client.Do(req)
 	if err != nil {
 		return nil, FeedParseError{Message: fmt.Sprintf("failed to fetch feed: %v", err)}
 	}
@@ -65,9 +70,13 @@ func ParseFeed(feedURL string, timeout time.Duration) ([]FeedArticle, error) {
 	return articles, nil
 }
 
-func DiscoverFeedURL(blogURL string, timeout time.Duration) (string, error) {
+func DiscoverFeedURL(ctx context.Context, blogURL string, timeout time.Duration) (string, error) {
 	client := &http.Client{Timeout: timeout}
-	response, err := client.Get(blogURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, blogURL, nil)
+	if err != nil {
+		return "", nil
+	}
+	response, err := client.Do(req)
 	if err != nil {
 		return "", nil
 	}
@@ -129,7 +138,7 @@ func DiscoverFeedURL(blogURL string, timeout time.Duration) (string, error) {
 		if resolved == "" {
 			continue
 		}
-		ok, err := isValidFeed(resolved, timeout)
+		ok, err := isValidFeed(ctx, resolved, timeout)
 		if err == nil && ok {
 			return resolved, nil
 		}
@@ -138,9 +147,13 @@ func DiscoverFeedURL(blogURL string, timeout time.Duration) (string, error) {
 	return "", nil
 }
 
-func isValidFeed(feedURL string, timeout time.Duration) (bool, error) {
+func isValidFeed(ctx context.Context, feedURL string, timeout time.Duration) (bool, error) {
 	client := &http.Client{Timeout: timeout}
-	response, err := client.Get(feedURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, feedURL, nil)
+	if err != nil {
+		return false, err
+	}
+	response, err := client.Do(req)
 	if err != nil {
 		return false, err
 	}

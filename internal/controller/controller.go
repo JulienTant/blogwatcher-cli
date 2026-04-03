@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/JulienTant/blogwatcher-cli/internal/model"
@@ -32,13 +33,13 @@ func (e ArticleNotFoundError) Error() string {
 	return fmt.Sprintf("Article %d not found", e.ID)
 }
 
-func AddBlog(db *storage.Database, name string, url string, feedURL string, scrapeSelector string) (model.Blog, error) {
-	if existing, err := db.GetBlogByName(name); err != nil {
+func AddBlog(ctx context.Context, db *storage.Database, name string, url string, feedURL string, scrapeSelector string) (model.Blog, error) {
+	if existing, err := db.GetBlogByName(ctx, name); err != nil {
 		return model.Blog{}, err
 	} else if existing != nil {
 		return model.Blog{}, BlogAlreadyExistsError{Field: "name", Value: name}
 	}
-	if existing, err := db.GetBlogByURL(url); err != nil {
+	if existing, err := db.GetBlogByURL(ctx, url); err != nil {
 		return model.Blog{}, err
 	} else if existing != nil {
 		return model.Blog{}, BlogAlreadyExistsError{Field: "URL", Value: url}
@@ -50,25 +51,25 @@ func AddBlog(db *storage.Database, name string, url string, feedURL string, scra
 		FeedURL:        feedURL,
 		ScrapeSelector: scrapeSelector,
 	}
-	return db.AddBlog(blog)
+	return db.AddBlog(ctx, blog)
 }
 
-func RemoveBlog(db *storage.Database, name string) error {
-	blog, err := db.GetBlogByName(name)
+func RemoveBlog(ctx context.Context, db *storage.Database, name string) error {
+	blog, err := db.GetBlogByName(ctx, name)
 	if err != nil {
 		return err
 	}
 	if blog == nil {
 		return BlogNotFoundError{Name: name}
 	}
-	_, err = db.RemoveBlog(blog.ID)
+	_, err = db.RemoveBlog(ctx, blog.ID)
 	return err
 }
 
-func GetArticles(db *storage.Database, showAll bool, blogName string) ([]model.Article, map[int64]string, error) {
+func GetArticles(ctx context.Context, db *storage.Database, showAll bool, blogName string) ([]model.Article, map[int64]string, error) {
 	var blogID *int64
 	if blogName != "" {
-		blog, err := db.GetBlogByName(blogName)
+		blog, err := db.GetBlogByName(ctx, blogName)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -78,11 +79,11 @@ func GetArticles(db *storage.Database, showAll bool, blogName string) ([]model.A
 		blogID = &blog.ID
 	}
 
-	articles, err := db.ListArticles(!showAll, blogID)
+	articles, err := db.ListArticles(ctx, !showAll, blogID)
 	if err != nil {
 		return nil, nil, err
 	}
-	blogs, err := db.ListBlogs()
+	blogs, err := db.ListBlogs(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -94,8 +95,8 @@ func GetArticles(db *storage.Database, showAll bool, blogName string) ([]model.A
 	return articles, blogNames, nil
 }
 
-func MarkArticleRead(db *storage.Database, articleID int64) (model.Article, error) {
-	article, err := db.GetArticle(articleID)
+func MarkArticleRead(ctx context.Context, db *storage.Database, articleID int64) (model.Article, error) {
+	article, err := db.GetArticle(ctx, articleID)
 	if err != nil {
 		return model.Article{}, err
 	}
@@ -103,7 +104,7 @@ func MarkArticleRead(db *storage.Database, articleID int64) (model.Article, erro
 		return model.Article{}, ArticleNotFoundError{ID: articleID}
 	}
 	if !article.IsRead {
-		_, err = db.MarkArticleRead(articleID)
+		_, err = db.MarkArticleRead(ctx, articleID)
 		if err != nil {
 			return model.Article{}, err
 		}
@@ -111,10 +112,10 @@ func MarkArticleRead(db *storage.Database, articleID int64) (model.Article, erro
 	return *article, nil
 }
 
-func MarkAllArticlesRead(db *storage.Database, blogName string) ([]model.Article, error) {
+func MarkAllArticlesRead(ctx context.Context, db *storage.Database, blogName string) ([]model.Article, error) {
 	var blogID *int64
 	if blogName != "" {
-		blog, err := db.GetBlogByName(blogName)
+		blog, err := db.GetBlogByName(ctx, blogName)
 		if err != nil {
 			return nil, err
 		}
@@ -124,13 +125,13 @@ func MarkAllArticlesRead(db *storage.Database, blogName string) ([]model.Article
 		blogID = &blog.ID
 	}
 
-	articles, err := db.ListArticles(true, blogID)
+	articles, err := db.ListArticles(ctx, true, blogID)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, article := range articles {
-		_, err := db.MarkArticleRead(article.ID)
+		_, err := db.MarkArticleRead(ctx, article.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -139,8 +140,8 @@ func MarkAllArticlesRead(db *storage.Database, blogName string) ([]model.Article
 	return articles, nil
 }
 
-func MarkArticleUnread(db *storage.Database, articleID int64) (model.Article, error) {
-	article, err := db.GetArticle(articleID)
+func MarkArticleUnread(ctx context.Context, db *storage.Database, articleID int64) (model.Article, error) {
+	article, err := db.GetArticle(ctx, articleID)
 	if err != nil {
 		return model.Article{}, err
 	}
@@ -148,7 +149,7 @@ func MarkArticleUnread(db *storage.Database, articleID int64) (model.Article, er
 		return model.Article{}, ArticleNotFoundError{ID: articleID}
 	}
 	if article.IsRead {
-		_, err = db.MarkArticleUnread(articleID)
+		_, err = db.MarkArticleUnread(ctx, articleID)
 		if err != nil {
 			return model.Article{}, err
 		}

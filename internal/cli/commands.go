@@ -26,7 +26,7 @@ func newAddCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
 			url := args[1]
-			db, err := storage.OpenDatabase(viper.GetString("db"))
+			db, err := storage.OpenDatabase(cmd.Context(), viper.GetString("db"))
 			if err != nil {
 				return err
 			}
@@ -35,7 +35,7 @@ func newAddCommand() *cobra.Command {
 					fmt.Fprintf(os.Stderr, "close db: %v\n", err)
 				}
 			}()
-			_, err = controller.AddBlog(db, name, url, viper.GetString("feed-url"), viper.GetString("scrape-selector"))
+			_, err = controller.AddBlog(cmd.Context(), db, name, url, viper.GetString("feed-url"), viper.GetString("scrape-selector"))
 			if err != nil {
 				printError(err)
 				return markError(err)
@@ -65,7 +65,7 @@ func newRemoveCommand() *cobra.Command {
 					return nil
 				}
 			}
-			db, err := storage.OpenDatabase(viper.GetString("db"))
+			db, err := storage.OpenDatabase(cmd.Context(), viper.GetString("db"))
 			if err != nil {
 				return err
 			}
@@ -74,7 +74,7 @@ func newRemoveCommand() *cobra.Command {
 					fmt.Fprintf(os.Stderr, "close db: %v\n", err)
 				}
 			}()
-			if err := controller.RemoveBlog(db, name); err != nil {
+			if err := controller.RemoveBlog(cmd.Context(), db, name); err != nil {
 				printError(err)
 				return markError(err)
 			}
@@ -91,7 +91,7 @@ func newBlogsCommand() *cobra.Command {
 		Use:   "blogs",
 		Short: "List all tracked blogs.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			db, err := storage.OpenDatabase(viper.GetString("db"))
+			db, err := storage.OpenDatabase(cmd.Context(), viper.GetString("db"))
 			if err != nil {
 				return err
 			}
@@ -100,7 +100,7 @@ func newBlogsCommand() *cobra.Command {
 					fmt.Fprintf(os.Stderr, "close db: %v\n", err)
 				}
 			}()
-			blogs, err := db.ListBlogs()
+			blogs, err := db.ListBlogs(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -138,7 +138,7 @@ func newScanCommand() *cobra.Command {
 			silent := viper.GetBool("silent")
 			workers := viper.GetInt("workers")
 
-			db, err := storage.OpenDatabase(viper.GetString("db"))
+			db, err := storage.OpenDatabase(cmd.Context(), viper.GetString("db"))
 			if err != nil {
 				return err
 			}
@@ -149,7 +149,7 @@ func newScanCommand() *cobra.Command {
 			}()
 
 			if len(args) == 1 {
-				result, err := scanner.ScanBlogByName(db, args[0])
+				result, err := scanner.ScanBlogByName(cmd.Context(), db, args[0])
 				if err != nil {
 					return err
 				}
@@ -162,7 +162,7 @@ func newScanCommand() *cobra.Command {
 					printScanResult(*result)
 				}
 			} else {
-				blogs, err := db.ListBlogs()
+				blogs, err := db.ListBlogs(cmd.Context())
 				if err != nil {
 					return err
 				}
@@ -173,7 +173,7 @@ func newScanCommand() *cobra.Command {
 				if !silent {
 					cprintf([]color.Attribute{color.FgCyan}, "Scanning %d blog(s)...\n\n", len(blogs))
 				}
-				results, err := scanner.ScanAllBlogs(db, workers)
+				results, err := scanner.ScanAllBlogs(cmd.Context(), db, workers)
 				if err != nil {
 					return err
 				}
@@ -212,7 +212,7 @@ func newArticlesCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			showAll := viper.GetBool("all")
 
-			db, err := storage.OpenDatabase(viper.GetString("db"))
+			db, err := storage.OpenDatabase(cmd.Context(), viper.GetString("db"))
 			if err != nil {
 				return err
 			}
@@ -221,7 +221,7 @@ func newArticlesCommand() *cobra.Command {
 					fmt.Fprintf(os.Stderr, "close db: %v\n", err)
 				}
 			}()
-			articles, blogNames, err := controller.GetArticles(db, showAll, viper.GetString("blog"))
+			articles, blogNames, err := controller.GetArticles(cmd.Context(), db, showAll, viper.GetString("blog"))
 			if err != nil {
 				printError(err)
 				return markError(err)
@@ -262,7 +262,7 @@ func newReadCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			db, err := storage.OpenDatabase(viper.GetString("db"))
+			db, err := storage.OpenDatabase(cmd.Context(), viper.GetString("db"))
 			if err != nil {
 				return err
 			}
@@ -271,7 +271,7 @@ func newReadCommand() *cobra.Command {
 					fmt.Fprintf(os.Stderr, "close db: %v\n", err)
 				}
 			}()
-			article, err := controller.MarkArticleRead(db, articleID)
+			article, err := controller.MarkArticleRead(cmd.Context(), db, articleID)
 			if err != nil {
 				printError(err)
 				return markError(err)
@@ -294,7 +294,7 @@ func newReadAllCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			blogName := viper.GetString("blog")
 
-			db, err := storage.OpenDatabase(viper.GetString("db"))
+			db, err := storage.OpenDatabase(cmd.Context(), viper.GetString("db"))
 			if err != nil {
 				return err
 			}
@@ -304,7 +304,7 @@ func newReadAllCommand() *cobra.Command {
 				}
 			}()
 
-			articles, _, err := controller.GetArticles(db, false, blogName)
+			articles, _, err := controller.GetArticles(cmd.Context(), db, false, blogName)
 			if err != nil {
 				printError(err)
 				return markError(err)
@@ -328,7 +328,7 @@ func newReadAllCommand() *cobra.Command {
 				}
 			}
 
-			marked, err := controller.MarkAllArticlesRead(db, blogName)
+			marked, err := controller.MarkAllArticlesRead(cmd.Context(), db, blogName)
 			if err != nil {
 				printError(err)
 				return markError(err)
@@ -354,7 +354,7 @@ func newUnreadCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			db, err := storage.OpenDatabase(viper.GetString("db"))
+			db, err := storage.OpenDatabase(cmd.Context(), viper.GetString("db"))
 			if err != nil {
 				return err
 			}
@@ -363,7 +363,7 @@ func newUnreadCommand() *cobra.Command {
 					fmt.Fprintf(os.Stderr, "close db: %v\n", err)
 				}
 			}()
-			article, err := controller.MarkArticleUnread(db, articleID)
+			article, err := controller.MarkArticleUnread(cmd.Context(), db, articleID)
 			if err != nil {
 				printError(err)
 				return markError(err)

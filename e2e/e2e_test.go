@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -26,7 +27,7 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	binaryPath = filepath.Join(tmp, "blogwatcher-cli")
-	cmd := exec.Command("go", "build", "-o", binaryPath, "../cmd/blogwatcher-cli")
+	cmd := exec.CommandContext(context.Background(), "go", "build", "-o", binaryPath, "../cmd/blogwatcher-cli")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -82,7 +83,7 @@ func (c *cliOpts) run(t *testing.T, args []string, opts map[string]string) (stdo
 		}
 	}
 
-	cmd := exec.Command(binaryPath, cmdArgs...)
+	cmd := exec.CommandContext(context.Background(), binaryPath, cmdArgs...)
 	cmd.Env = append(os.Environ(), append(extraEnv, "NO_COLOR=1")...)
 	var outBuf, errBuf strings.Builder
 	cmd.Stdout = &outBuf
@@ -90,7 +91,8 @@ func (c *cliOpts) run(t *testing.T, args []string, opts map[string]string) (stdo
 	err := cmd.Run()
 	code := 0
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			code = exitErr.ExitCode()
 		} else {
 			t.Fatalf("exec error: %v", err)
@@ -226,7 +228,8 @@ func startTestServer(t *testing.T) string {
 	goHTMLTemplate, err := os.ReadFile("testdata/go_blog.html")
 	require.NoError(t, err)
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	lc := net.ListenConfig{}
+	listener, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	baseURL := "http://" + listener.Addr().String()
 
