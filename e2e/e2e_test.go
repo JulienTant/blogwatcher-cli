@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -24,7 +25,11 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "create temp dir: %v\n", err)
 		os.Exit(1)
 	}
-	defer os.RemoveAll(tmp)
+	defer func() {
+		if err := os.RemoveAll(tmp); err != nil {
+			fmt.Fprintf(os.Stderr, "cleanup temp dir: %v\n", err)
+		}
+	}()
 
 	binaryPath = filepath.Join(tmp, "blogwatcher-cli")
 	cmd := exec.Command("go", "build", "-o", binaryPath, "../cmd/blogwatcher-cli")
@@ -223,9 +228,14 @@ func startTestServer(t *testing.T) string {
 
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/go/feed.atom", func(w http.ResponseWriter, r *http.Request) {
+	writeOrFail := func(w http.ResponseWriter, data []byte) {
+		_, err := w.Write(data)
+		assert.NoError(t, err, "write response")
+	}
+
+	mux.HandleFunc("/go/feed.atom", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/atom+xml")
-		w.Write(atomFeed)
+		writeOrFail(w, atomFeed)
 	})
 	mux.HandleFunc("/go/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/go/" {
@@ -233,11 +243,11 @@ func startTestServer(t *testing.T) string {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html")
-		w.Write(goHTML)
+		writeOrFail(w, goHTML)
 	})
-	mux.HandleFunc("/github/feed/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/github/feed/", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
-		w.Write(rssFeed)
+		writeOrFail(w, rssFeed)
 	})
 	mux.HandleFunc("/github/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/github/" {
@@ -245,9 +255,9 @@ func startTestServer(t *testing.T) string {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprintf(w, `<!DOCTYPE html><html><head>
+		writeOrFail(w, []byte(`<!DOCTYPE html><html><head>
 <link type="application/rss+xml" rel="alternate" href="/github/feed/" title="GitHub Blog" />
-</head><body><h1>GitHub Blog</h1></body></html>`)
+</head><body><h1>GitHub Blog</h1></body></html>`))
 	})
 	mux.HandleFunc("/rust/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/rust/" {
@@ -255,11 +265,21 @@ func startTestServer(t *testing.T) string {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html")
-		w.Write(rustHTML)
+		writeOrFail(w, rustHTML)
 	})
 
-	go http.Serve(listener, mux)
-	t.Cleanup(func() { listener.Close() })
+	go func() {
+		err := http.Serve(listener, mux)
+		if !errors.Is(err, net.ErrClosed) {
+			assert.NoError(t, err, "http.Serve")
+		}
+	}()
+	t.Cleanup(func() {
+		err := listener.Close()
+		if !errors.Is(err, net.ErrClosed) {
+			assert.NoError(t, err, "listener.Close")
+		}
+	})
 
 	return baseURL
 }
@@ -316,8 +336,7 @@ func TestE2E(t *testing.T) {
 			checkOutput(t, "10_scan_silent", out, baseURL)
 
 			// ── Scan with workers ──
-			out = c.ok(t, []string{"scan"}, map[string]string{"workers": "1"})
-			// Just verify it succeeds — output is same shape as scan_all.
+			c.ok(t, []string{"scan"}, map[string]string{"workers": "1"})
 
 			// ── Articles (unread) ──
 			out = c.ok(t, []string{"articles"}, nil)

@@ -40,7 +40,7 @@ func newAddCommand() *cobra.Command {
 				printError(err)
 				return markError(err)
 			}
-			cprintf([]color.Attribute{color.FgGreen},"Added blog '%s'\n", name)
+			cprintf([]color.Attribute{color.FgGreen}, "Added blog '%s'\n", name)
 			return nil
 		},
 	}
@@ -78,7 +78,7 @@ func newRemoveCommand() *cobra.Command {
 				printError(err)
 				return markError(err)
 			}
-			cprintf([]color.Attribute{color.FgGreen},"Removed blog '%s'\n", name)
+			cprintf([]color.Attribute{color.FgGreen}, "Removed blog '%s'\n", name)
 			return nil
 		},
 	}
@@ -108,9 +108,9 @@ func newBlogsCommand() *cobra.Command {
 				fmt.Println("No blogs tracked yet. Use 'blogwatcher-cli add' to add one.")
 				return nil
 			}
-			cprintf([]color.Attribute{color.FgCyan, color.Bold},"Tracked blogs (%d):\n\n", len(blogs))
+			cprintf([]color.Attribute{color.FgCyan, color.Bold}, "Tracked blogs (%d):\n\n", len(blogs))
 			for _, blog := range blogs {
-				cprintf([]color.Attribute{color.FgWhite, color.Bold},"  %s\n", blog.Name)
+				cprintf([]color.Attribute{color.FgWhite, color.Bold}, "  %s\n", blog.Name)
 				fmt.Printf("    URL: %s\n", blog.URL)
 				if blog.FeedURL != "" {
 					fmt.Printf("    Feed: %s\n", blog.FeedURL)
@@ -171,7 +171,7 @@ func newScanCommand() *cobra.Command {
 					return nil
 				}
 				if !silent {
-					cprintf([]color.Attribute{color.FgCyan},"Scanning %d blog(s)...\n\n", len(blogs))
+					cprintf([]color.Attribute{color.FgCyan}, "Scanning %d blog(s)...\n\n", len(blogs))
 				}
 				results, err := scanner.ScanAllBlogs(db, workers)
 				if err != nil {
@@ -187,9 +187,9 @@ func newScanCommand() *cobra.Command {
 				if !silent {
 					fmt.Println()
 					if totalNew > 0 {
-						cprintf([]color.Attribute{color.FgGreen, color.Bold},"Found %d new article(s) total!\n", totalNew)
+						cprintf([]color.Attribute{color.FgGreen, color.Bold}, "Found %d new article(s) total!\n", totalNew)
 					} else {
-						cprintln([]color.Attribute{color.FgYellow},"No new articles found.")
+						cprintln([]color.Attribute{color.FgYellow}, "No new articles found.")
 					}
 				}
 			}
@@ -230,7 +230,7 @@ func newArticlesCommand() *cobra.Command {
 				if showAll {
 					fmt.Println("No articles found.")
 				} else {
-					cprintln([]color.Attribute{color.FgGreen},"No unread articles!")
+					cprintln([]color.Attribute{color.FgGreen}, "No unread articles!")
 				}
 				return nil
 			}
@@ -239,7 +239,7 @@ func newArticlesCommand() *cobra.Command {
 			if showAll {
 				label = "All articles"
 			}
-			cprintf([]color.Attribute{color.FgCyan, color.Bold},"%s (%d):\n\n", label, len(articles))
+			cprintf([]color.Attribute{color.FgCyan, color.Bold}, "%s (%d):\n\n", label, len(articles))
 			for _, article := range articles {
 				printArticle(article, blogNames[article.BlogID])
 			}
@@ -279,7 +279,7 @@ func newReadCommand() *cobra.Command {
 			if article.IsRead {
 				fmt.Printf("Article %d is already marked as read.\n", articleID)
 			} else {
-				cprintf([]color.Attribute{color.FgGreen},"Marked article %d as read\n", articleID)
+				cprintf([]color.Attribute{color.FgGreen}, "Marked article %d as read\n", articleID)
 			}
 			return nil
 		},
@@ -310,7 +310,7 @@ func newReadAllCommand() *cobra.Command {
 				return markError(err)
 			}
 			if len(articles) == 0 {
-				cprintln([]color.Attribute{color.FgGreen},"No unread articles to mark as read.")
+				cprintln([]color.Attribute{color.FgGreen}, "No unread articles to mark as read.")
 				return nil
 			}
 
@@ -371,7 +371,7 @@ func newUnreadCommand() *cobra.Command {
 			if !article.IsRead {
 				fmt.Printf("Article %d is already marked as unread.\n", articleID)
 			} else {
-				cprintf([]color.Attribute{color.FgGreen},"Marked article %d as unread\n", articleID)
+				cprintf([]color.Attribute{color.FgGreen}, "Marked article %d as unread\n", articleID)
 			}
 			return nil
 		},
@@ -384,13 +384,13 @@ func printScanResult(result scanner.ScanResult) {
 	if result.NewArticles > 0 {
 		statusColor = []color.Attribute{color.FgGreen}
 	}
-	cprintf([]color.Attribute{color.FgWhite, color.Bold},"  %s\n", result.BlogName)
+	cprintf([]color.Attribute{color.FgWhite, color.Bold}, "  %s\n", result.BlogName)
 	if result.Error != "" {
-		cprintfErr(color.FgRed,"    Error: %s\n", result.Error)
+		cprintfErr(color.FgRed, "    Error: %s\n", result.Error)
 		return
 	}
 	if result.Source == "none" {
-		cprintln([]color.Attribute{color.FgYellow},"    No feed or scraper configured")
+		cprintln([]color.Attribute{color.FgYellow}, "    No feed or scraper configured")
 		return
 	}
 	sourceLabel := "HTML"
