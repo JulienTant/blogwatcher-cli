@@ -21,9 +21,6 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Install mingw for Windows builds
-        run: sudo apt-get update && sudo apt-get install -y mingw-w64
-
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
@@ -31,4 +28,3 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
