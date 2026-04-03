@@ -1,11 +1,11 @@
-### While developping
+### While developing
 
 #### Tests, tests, tests!
 
-Whenever possible, apply TDD. Write the test first, watch it fail, write hte code, watch the test pass! This includes unit tests AND e2e tests!
+Whenever possible, apply TDD. Write the test first, watch it fail, write the code, watch the test pass! This includes unit tests AND e2e tests!
 
 #### Errors matter
-You must never ignore an error. If this this a production error, log it. If it is a test error, assert/require on it.
+You must never ignore an error. If this is a production error, log it. If it is a test error, assert/require on it.
 
 ```go
 // BAD
@@ -19,7 +19,7 @@ if err != nil {
 ```
 
 #### Use testify in tests
-Tests will use the assertify library, with `assert` and `require`. Do not use `t.` functions to do assertion.
+Tests will use the testify library, with `assert` and `require`. Do not use `t.` functions to do assertion.
 
 ```go
 // BAD
@@ -47,7 +47,7 @@ response, err := client.Do(req)
 `
 ```
 
-### After developping
+### After developing
 
 - Ensure your files are correctly formatted by running `golangci-lint`. 
-- Ensure the tests are ok by running `gotestsun`
+- Ensure the tests are ok by running `gotestsum`
