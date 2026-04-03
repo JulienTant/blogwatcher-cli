@@ -3,9 +3,11 @@ package cli
 import (
 	"fmt"
 	"os"
+	"strings"
 
-	"github.com/Hyaxia/blogwatcher/internal/version"
+	"github.com/JulienTant/blogwatcher/internal/version"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 func NewRootCommand() *cobra.Command {
@@ -17,6 +19,12 @@ func NewRootCommand() *cobra.Command {
 	}
 	rootCmd.Version = version.Version
 	rootCmd.SetVersionTemplate("{{.Version}}\n")
+
+	rootCmd.PersistentFlags().String("db", "", "Path to the SQLite database file (default: ~/.blogwatcher/blogwatcher.db)")
+
+	cobra.OnInitialize(initConfig)
+	viper.BindPFlags(rootCmd.PersistentFlags())
+
 	rootCmd.AddCommand(newAddCommand())
 	rootCmd.AddCommand(newRemoveCommand())
 	rootCmd.AddCommand(newBlogsCommand())
@@ -26,6 +34,12 @@ func NewRootCommand() *cobra.Command {
 	rootCmd.AddCommand(newReadAllCommand())
 	rootCmd.AddCommand(newUnreadCommand())
 	return rootCmd
+}
+
+func initConfig() {
+	viper.SetEnvPrefix("BLOGWATCHER")
+	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
+	viper.AutomaticEnv()
 }
 
 func Execute() {
