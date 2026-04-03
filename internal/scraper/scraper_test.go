@@ -1,6 +1,7 @@
 package scraper
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -27,9 +28,9 @@ func TestScrapeBlog(t *testing.T) {
 	}))
 	defer server.Close()
 
-	articles, err := ScrapeBlog(server.URL, "article h2 a, .post", 2*time.Second)
+	articles, err := ScrapeBlog(context.Background(), server.URL, "article h2 a, .post", 2*time.Second)
 	require.NoError(t, err, "scrape blog")
 	require.Len(t, articles, 2)
-	require.NotEqual(t, "", articles[0].URL)
-	require.NotEqual(t, "", articles[1].URL)
+	require.NotEmpty(t, articles[0].URL)
+	require.NotEmpty(t, articles[1].URL)
 }

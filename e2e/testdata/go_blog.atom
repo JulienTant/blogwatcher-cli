@@ -1,0 +1,33 @@
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>The Go Blog</title>
+  <id>tag:blog.golang.org,2013:blog.golang.org</id>
+  <link rel="self" href="https://go.dev/blog/feed.atom"></link>
+  <updated>2026-03-24T00:00:00+00:00</updated>
+  <entry>
+    <title>Type Construction and Cycle Detection</title>
+    <id>tag:blog.golang.org,2013:blog.golang.org/type-construction-and-cycle-detection</id>
+    <link rel="alternate" href="https://go.dev/blog/type-construction-and-cycle-detection"></link>
+    <published>2026-03-24T00:00:00+00:00</published>
+    <updated>2026-03-24T00:00:00+00:00</updated>
+    <author><name>Mark Freeman</name></author>
+    <summary type="html">Go 1.26 simplifies type construction and enhances cycle detection for certain kinds of recursive types.</summary>
+  </entry>
+  <entry>
+    <title>More powerful Go execution traces</title>
+    <id>tag:blog.golang.org,2013:blog.golang.org/execution-traces-2024</id>
+    <link rel="alternate" href="https://go.dev/blog/execution-traces-2024"></link>
+    <published>2026-03-14T00:00:00+00:00</published>
+    <updated>2026-03-14T00:00:00+00:00</updated>
+    <author><name>Michael Knyszek</name></author>
+    <summary type="html">Improvements to Go execution traces.</summary>
+  </entry>
+  <entry>
+    <title>Structured Logging with slog</title>
+    <id>tag:blog.golang.org,2013:blog.golang.org/slog</id>
+    <link rel="alternate" href="https://go.dev/blog/slog"></link>
+    <published>2026-02-22T00:00:00+00:00</published>
+    <updated>2026-02-22T00:00:00+00:00</updated>
+    <author><name>Jonathan Amsterdam</name></author>
+    <summary type="html">The Go 1.21 release includes a new structured logging package, log/slog.</summary>
+  </entry>
+</feed>

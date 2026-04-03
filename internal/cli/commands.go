@@ -26,7 +26,7 @@ func newAddCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
 			url := args[1]
-			db, err := storage.OpenDatabase(viper.GetString("db"))
+			db, err := storage.OpenDatabase(cmd.Context(), viper.GetString("db"))
 			if err != nil {
 				return err
 			}
@@ -35,12 +35,12 @@ func newAddCommand() *cobra.Command {
 					fmt.Fprintf(os.Stderr, "close db: %v\n", err)
 				}
 			}()
-			_, err = controller.AddBlog(db, name, url, viper.GetString("feed-url"), viper.GetString("scrape-selector"))
+			_, err = controller.AddBlog(cmd.Context(), db, name, url, viper.GetString("feed-url"), viper.GetString("scrape-selector"))
 			if err != nil {
 				printError(err)
 				return markError(err)
 			}
-			cprintf([]color.Attribute{color.FgGreen},"Added blog '%s'\n", name)
+			cprintf([]color.Attribute{color.FgGreen}, "Added blog '%s'\n", name)
 			return nil
 		},
 	}
@@ -65,7 +65,7 @@ func newRemoveCommand() *cobra.Command {
 					return nil
 				}
 			}
-			db, err := storage.OpenDatabase(viper.GetString("db"))
+			db, err := storage.OpenDatabase(cmd.Context(), viper.GetString("db"))
 			if err != nil {
 				return err
 			}
@@ -74,11 +74,11 @@ func newRemoveCommand() *cobra.Command {
 					fmt.Fprintf(os.Stderr, "close db: %v\n", err)
 				}
 			}()
-			if err := controller.RemoveBlog(db, name); err != nil {
+			if err := controller.RemoveBlog(cmd.Context(), db, name); err != nil {
 				printError(err)
 				return markError(err)
 			}
-			cprintf([]color.Attribute{color.FgGreen},"Removed blog '%s'\n", name)
+			cprintf([]color.Attribute{color.FgGreen}, "Removed blog '%s'\n", name)
 			return nil
 		},
 	}
@@ -91,7 +91,7 @@ func newBlogsCommand() *cobra.Command {
 		Use:   "blogs",
 		Short: "List all tracked blogs.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			db, err := storage.OpenDatabase(viper.GetString("db"))
+			db, err := storage.OpenDatabase(cmd.Context(), viper.GetString("db"))
 			if err != nil {
 				return err
 			}
@@ -100,7 +100,7 @@ func newBlogsCommand() *cobra.Command {
 					fmt.Fprintf(os.Stderr, "close db: %v\n", err)
 				}
 			}()
-			blogs, err := db.ListBlogs()
+			blogs, err := db.ListBlogs(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -108,9 +108,9 @@ func newBlogsCommand() *cobra.Command {
 				fmt.Println("No blogs tracked yet. Use 'blogwatcher-cli add' to add one.")
 				return nil
 			}
-			cprintf([]color.Attribute{color.FgCyan, color.Bold},"Tracked blogs (%d):\n\n", len(blogs))
+			cprintf([]color.Attribute{color.FgCyan, color.Bold}, "Tracked blogs (%d):\n\n", len(blogs))
 			for _, blog := range blogs {
-				cprintf([]color.Attribute{color.FgWhite, color.Bold},"  %s\n", blog.Name)
+				cprintf([]color.Attribute{color.FgWhite, color.Bold}, "  %s\n", blog.Name)
 				fmt.Printf("    URL: %s\n", blog.URL)
 				if blog.FeedURL != "" {
 					fmt.Printf("    Feed: %s\n", blog.FeedURL)
@@ -138,7 +138,7 @@ func newScanCommand() *cobra.Command {
 			silent := viper.GetBool("silent")
 			workers := viper.GetInt("workers")
 
-			db, err := storage.OpenDatabase(viper.GetString("db"))
+			db, err := storage.OpenDatabase(cmd.Context(), viper.GetString("db"))
 			if err != nil {
 				return err
 			}
@@ -149,7 +149,7 @@ func newScanCommand() *cobra.Command {
 			}()
 
 			if len(args) == 1 {
-				result, err := scanner.ScanBlogByName(db, args[0])
+				result, err := scanner.ScanBlogByName(cmd.Context(), db, args[0])
 				if err != nil {
 					return err
 				}
@@ -162,7 +162,7 @@ func newScanCommand() *cobra.Command {
 					printScanResult(*result)
 				}
 			} else {
-				blogs, err := db.ListBlogs()
+				blogs, err := db.ListBlogs(cmd.Context())
 				if err != nil {
 					return err
 				}
@@ -171,9 +171,9 @@ func newScanCommand() *cobra.Command {
 					return nil
 				}
 				if !silent {
-					cprintf([]color.Attribute{color.FgCyan},"Scanning %d blog(s)...\n\n", len(blogs))
+					cprintf([]color.Attribute{color.FgCyan}, "Scanning %d blog(s)...\n\n", len(blogs))
 				}
-				results, err := scanner.ScanAllBlogs(db, workers)
+				results, err := scanner.ScanAllBlogs(cmd.Context(), db, workers)
 				if err != nil {
 					return err
 				}
@@ -187,9 +187,9 @@ func newScanCommand() *cobra.Command {
 				if !silent {
 					fmt.Println()
 					if totalNew > 0 {
-						cprintf([]color.Attribute{color.FgGreen, color.Bold},"Found %d new article(s) total!\n", totalNew)
+						cprintf([]color.Attribute{color.FgGreen, color.Bold}, "Found %d new article(s) total!\n", totalNew)
 					} else {
-						cprintln([]color.Attribute{color.FgYellow},"No new articles found.")
+						cprintln([]color.Attribute{color.FgYellow}, "No new articles found.")
 					}
 				}
 			}
@@ -212,7 +212,7 @@ func newArticlesCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			showAll := viper.GetBool("all")
 
-			db, err := storage.OpenDatabase(viper.GetString("db"))
+			db, err := storage.OpenDatabase(cmd.Context(), viper.GetString("db"))
 			if err != nil {
 				return err
 			}
@@ -221,7 +221,7 @@ func newArticlesCommand() *cobra.Command {
 					fmt.Fprintf(os.Stderr, "close db: %v\n", err)
 				}
 			}()
-			articles, blogNames, err := controller.GetArticles(db, showAll, viper.GetString("blog"))
+			articles, blogNames, err := controller.GetArticles(cmd.Context(), db, showAll, viper.GetString("blog"))
 			if err != nil {
 				printError(err)
 				return markError(err)
@@ -230,7 +230,7 @@ func newArticlesCommand() *cobra.Command {
 				if showAll {
 					fmt.Println("No articles found.")
 				} else {
-					cprintln([]color.Attribute{color.FgGreen},"No unread articles!")
+					cprintln([]color.Attribute{color.FgGreen}, "No unread articles!")
 				}
 				return nil
 			}
@@ -239,7 +239,7 @@ func newArticlesCommand() *cobra.Command {
 			if showAll {
 				label = "All articles"
 			}
-			cprintf([]color.Attribute{color.FgCyan, color.Bold},"%s (%d):\n\n", label, len(articles))
+			cprintf([]color.Attribute{color.FgCyan, color.Bold}, "%s (%d):\n\n", label, len(articles))
 			for _, article := range articles {
 				printArticle(article, blogNames[article.BlogID])
 			}
@@ -262,7 +262,7 @@ func newReadCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			db, err := storage.OpenDatabase(viper.GetString("db"))
+			db, err := storage.OpenDatabase(cmd.Context(), viper.GetString("db"))
 			if err != nil {
 				return err
 			}
@@ -271,7 +271,7 @@ func newReadCommand() *cobra.Command {
 					fmt.Fprintf(os.Stderr, "close db: %v\n", err)
 				}
 			}()
-			article, err := controller.MarkArticleRead(db, articleID)
+			article, err := controller.MarkArticleRead(cmd.Context(), db, articleID)
 			if err != nil {
 				printError(err)
 				return markError(err)
@@ -279,7 +279,7 @@ func newReadCommand() *cobra.Command {
 			if article.IsRead {
 				fmt.Printf("Article %d is already marked as read.\n", articleID)
 			} else {
-				cprintf([]color.Attribute{color.FgGreen},"Marked article %d as read\n", articleID)
+				cprintf([]color.Attribute{color.FgGreen}, "Marked article %d as read\n", articleID)
 			}
 			return nil
 		},
@@ -294,7 +294,7 @@ func newReadAllCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			blogName := viper.GetString("blog")
 
-			db, err := storage.OpenDatabase(viper.GetString("db"))
+			db, err := storage.OpenDatabase(cmd.Context(), viper.GetString("db"))
 			if err != nil {
 				return err
 			}
@@ -304,13 +304,13 @@ func newReadAllCommand() *cobra.Command {
 				}
 			}()
 
-			articles, _, err := controller.GetArticles(db, false, blogName)
+			articles, _, err := controller.GetArticles(cmd.Context(), db, false, blogName)
 			if err != nil {
 				printError(err)
 				return markError(err)
 			}
 			if len(articles) == 0 {
-				cprintln([]color.Attribute{color.FgGreen},"No unread articles to mark as read.")
+				cprintln([]color.Attribute{color.FgGreen}, "No unread articles to mark as read.")
 				return nil
 			}
 
@@ -328,7 +328,7 @@ func newReadAllCommand() *cobra.Command {
 				}
 			}
 
-			marked, err := controller.MarkAllArticlesRead(db, blogName)
+			marked, err := controller.MarkAllArticlesRead(cmd.Context(), db, blogName)
 			if err != nil {
 				printError(err)
 				return markError(err)
@@ -354,7 +354,7 @@ func newUnreadCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			db, err := storage.OpenDatabase(viper.GetString("db"))
+			db, err := storage.OpenDatabase(cmd.Context(), viper.GetString("db"))
 			if err != nil {
 				return err
 			}
@@ -363,7 +363,7 @@ func newUnreadCommand() *cobra.Command {
 					fmt.Fprintf(os.Stderr, "close db: %v\n", err)
 				}
 			}()
-			article, err := controller.MarkArticleUnread(db, articleID)
+			article, err := controller.MarkArticleUnread(cmd.Context(), db, articleID)
 			if err != nil {
 				printError(err)
 				return markError(err)
@@ -371,7 +371,7 @@ func newUnreadCommand() *cobra.Command {
 			if !article.IsRead {
 				fmt.Printf("Article %d is already marked as unread.\n", articleID)
 			} else {
-				cprintf([]color.Attribute{color.FgGreen},"Marked article %d as unread\n", articleID)
+				cprintf([]color.Attribute{color.FgGreen}, "Marked article %d as unread\n", articleID)
 			}
 			return nil
 		},
@@ -384,13 +384,13 @@ func printScanResult(result scanner.ScanResult) {
 	if result.NewArticles > 0 {
 		statusColor = []color.Attribute{color.FgGreen}
 	}
-	cprintf([]color.Attribute{color.FgWhite, color.Bold},"  %s\n", result.BlogName)
+	cprintf([]color.Attribute{color.FgWhite, color.Bold}, "  %s\n", result.BlogName)
 	if result.Error != "" {
-		cprintfErr(color.FgRed,"    Error: %s\n", result.Error)
+		cprintfErr(color.FgRed, "    Error: %s\n", result.Error)
 		return
 	}
 	if result.Source == "none" {
-		cprintln([]color.Attribute{color.FgYellow},"    No feed or scraper configured")
+		cprintln([]color.Attribute{color.FgYellow}, "    No feed or scraper configured")
 		return
 	}
 	sourceLabel := "HTML"

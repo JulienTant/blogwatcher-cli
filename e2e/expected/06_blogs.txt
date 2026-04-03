@@ -1,0 +1,13 @@
+Tracked blogs (3):
+
+  github-blog
+    URL: {{SERVER}}/github/
+
+  go-blog
+    URL: {{SERVER}}/go/
+    Feed: {{SERVER}}/go/feed.atom
+
+  rust-blog
+    URL: {{SERVER}}/rust/
+    Selector: .post-list td a[href]
+

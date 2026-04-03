@@ -142,13 +142,23 @@ Tables:
 
 ### Requirements
 
--   Go 1.26+
+-   [mise](https://mise.jdx.dev/) (manages Go, golangci-lint, gotestsum, goreleaser)
+
+```bash
+mise install
+```
 
 ### Running Tests
 
 ```bash
 # Run all tests
-go test ./...
+gotestsum -- ./...
+
+# Run e2e tests only
+gotestsum -- ./e2e/ -count=1
+
+# Update e2e expected output after intentional changes
+UPDATE_EXPECTED=1 go test ./e2e/ -run TestE2E/flags
 ```
 
 ### Publishing

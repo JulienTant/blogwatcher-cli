@@ -1,12 +1,53 @@
-- Delete unused or obsolete files when your changes make them irrelevant (refactors, feature removals, etc.), and revert files only when the change is yours or explicitly requested. If a git operation leaves you unsure about other agents' in-flight work, stop and coordinate instead of deleting.
-- **Before attempting to delete a file to resolve a local type/lint failure, stop and ask the user.** Other agents are often editing adjacent files; deleting their work to silence an error is never acceptable without explicit approval.
-- NEVER edit `.env` or any environment variable files—only the user may change them.
-- Coordinate with other agents before removing their in-progress edits—don't revert or delete work you didn't author unless everyone agrees.
-- Moving/renaming and restoring files is allowed.
-- ABSOLUTELY NEVER run destructive git operations (e.g., `git reset --hard`, `rm`, `git checkout`/`git restore` to an older commit) unless the user gives an explicit, written instruction in this conversation. Treat these commands as catastrophic; if you are even slightly unsure, stop and ask before touching them. *(When working within Cursor or Codex Web, these git limitations do not apply; use the tooling's capabilities as needed.)*
-- Never use `git restore` (or similar commands) to revert files you didn't author—coordinate with other agents instead so their in-progress work stays intact.
-- Always double-check git status before any commit
-- Keep commits atomic: commit only the files you touched and list each path explicitly. For tracked files run `git commit -m "<scoped message>" -- path/to/file1 path/to/file2`. For brand-new files, use the one-liner `git restore --staged :/ && git add "path/to/file1" "path/to/file2" && git commit -m "<scoped message>" -- path/to/file1 path/to/file2`.
-- Quote any git paths containing brackets or parentheses (e.g., `src/app/[candidate]/**`) when staging or committing so the shell does not treat them as globs or subshells.
-- When running `git rebase`, avoid opening editors—export `GIT_EDITOR=:` and `GIT_SEQUENCE_EDITOR=:` (or pass `--no-edit`) so the default messages are used automatically.
-- Never amend commits unless you have explicit written approval in the task thread.
+### While developing
+
+#### Tests, tests, tests!
+
+Whenever possible, apply TDD. Write the test first, watch it fail, write the code, watch the test pass! This includes unit tests AND e2e tests!
+
+#### Errors matter
+You must never ignore an error. If this is a production error, log it. If it is a test error, assert/require on it.
+
+```go
+// BAD
+_ = someFunction()
+
+// GOOD
+err := someFunction()
+if err != nil {
+    // ...
+}
+```
+
+#### Use testify in tests
+Tests will use the testify library, with `assert` and `require`. Do not use `t.` functions to do assertion.
+
+```go
+// BAD
+if str == "" {
+    t.Fatal("str is empty")
+}
+
+// GOOD
+require.NotEmpty(t, str)
+```
+
+#### High standards
+
+When we have to pick between the right way or the easy way, we always pick the right way.
+
+```go
+client := &http.Client{Timeout: timeout}
+// BAD
+response, err := client.Get(blogURL)
+
+// GOOD
+req, err := http.NewRequestWithContext(ctx, http.MethodGet, blogURL, nil)
+// handle error here
+response, err := client.Do(req)
+`
+```
+
+### After developing
+
+- Ensure your files are correctly formatted by running `golangci-lint`. 
+- Ensure the tests are ok by running `gotestsum`
