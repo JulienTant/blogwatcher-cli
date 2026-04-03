@@ -7,12 +7,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
+	sq "github.com/Masterminds/squirrel"
+	"github.com/golang-migrate/migrate/v4"
+	migratesqlite "github.com/golang-migrate/migrate/v4/database/sqlite"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	_ "modernc.org/sqlite"
 
 	"github.com/JulienTant/blogwatcher-cli/internal/model"
+	"github.com/JulienTant/blogwatcher-cli/internal/storage/migrations"
 )
 
 const sqliteTimeLayout = time.RFC3339Nano
@@ -50,7 +54,7 @@ func OpenDatabase(ctx context.Context, path string) (*Database, error) {
 	}
 
 	db := &Database{path: path, conn: conn}
-	if err := db.init(ctx); err != nil {
+	if err := db.migrate(); err != nil {
 		if cerr := conn.Close(); cerr != nil {
 			fmt.Fprintf(os.Stderr, "close: %v\n", cerr)
 		}
@@ -70,41 +74,37 @@ func (db *Database) Close() error {
 	return db.conn.Close()
 }
 
-func (db *Database) init(ctx context.Context) error {
-	schema := `
-		CREATE TABLE IF NOT EXISTS blogs (
-			id INTEGER PRIMARY KEY,
-			name TEXT NOT NULL,
-			url TEXT NOT NULL UNIQUE,
-			feed_url TEXT,
-			scrape_selector TEXT,
-			last_scanned TIMESTAMP
-		);
-		CREATE TABLE IF NOT EXISTS articles (
-			id INTEGER PRIMARY KEY,
-			blog_id INTEGER NOT NULL,
-			title TEXT NOT NULL,
-			url TEXT NOT NULL UNIQUE,
-			published_date TIMESTAMP,
-			discovered_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			is_read BOOLEAN DEFAULT FALSE,
-			FOREIGN KEY (blog_id) REFERENCES blogs(id)
-		);
-	`
-	_, err := db.conn.ExecContext(ctx, schema)
-	return err
+func (db *Database) migrate() error {
+	source, err := iofs.New(migrations.FS, ".")
+	if err != nil {
+		return fmt.Errorf("create migration source: %w", err)
+	}
+
+	driver, err := migratesqlite.WithInstance(db.conn, &migratesqlite.Config{})
+	if err != nil {
+		return fmt.Errorf("create migration driver: %w", err)
+	}
+
+	m, err := migrate.NewWithInstance("iofs", source, "sqlite", driver)
+	if err != nil {
+		return fmt.Errorf("create migrator: %w", err)
+	}
+
+	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return fmt.Errorf("run migrations: %w", err)
+	}
+
+	return nil
 }
 
+// Blog operations
+
 func (db *Database) AddBlog(ctx context.Context, blog model.Blog) (model.Blog, error) {
-	result, err := db.conn.ExecContext(ctx,
-		`INSERT INTO blogs (name, url, feed_url, scrape_selector, last_scanned)
-		VALUES (?, ?, ?, ?, ?)`,
-		blog.Name,
-		blog.URL,
-		nullIfEmpty(blog.FeedURL),
-		nullIfEmpty(blog.ScrapeSelector),
-		formatTimePtr(blog.LastScanned),
-	)
+	result, err := sq.Insert("blogs").
+		Columns("name", "url", "feed_url", "scrape_selector", "last_scanned").
+		Values(blog.Name, blog.URL, nullIfEmpty(blog.FeedURL), nullIfEmpty(blog.ScrapeSelector), formatTimePtr(blog.LastScanned)).
+		RunWith(db.conn).
+		ExecContext(ctx)
 	if err != nil {
 		return blog, err
 	}
@@ -117,22 +117,38 @@ func (db *Database) AddBlog(ctx context.Context, blog model.Blog) (model.Blog, e
 }
 
 func (db *Database) GetBlog(ctx context.Context, id int64) (*model.Blog, error) {
-	row := db.conn.QueryRowContext(ctx, `SELECT id, name, url, feed_url, scrape_selector, last_scanned FROM blogs WHERE id = ?`, id)
+	row := sq.Select("id", "name", "url", "feed_url", "scrape_selector", "last_scanned").
+		From("blogs").
+		Where(sq.Eq{"id": id}).
+		RunWith(db.conn).
+		QueryRowContext(ctx)
 	return scanBlog(row)
 }
 
 func (db *Database) GetBlogByName(ctx context.Context, name string) (*model.Blog, error) {
-	row := db.conn.QueryRowContext(ctx, `SELECT id, name, url, feed_url, scrape_selector, last_scanned FROM blogs WHERE name = ?`, name)
+	row := sq.Select("id", "name", "url", "feed_url", "scrape_selector", "last_scanned").
+		From("blogs").
+		Where(sq.Eq{"name": name}).
+		RunWith(db.conn).
+		QueryRowContext(ctx)
 	return scanBlog(row)
 }
 
 func (db *Database) GetBlogByURL(ctx context.Context, url string) (*model.Blog, error) {
-	row := db.conn.QueryRowContext(ctx, `SELECT id, name, url, feed_url, scrape_selector, last_scanned FROM blogs WHERE url = ?`, url)
+	row := sq.Select("id", "name", "url", "feed_url", "scrape_selector", "last_scanned").
+		From("blogs").
+		Where(sq.Eq{"url": url}).
+		RunWith(db.conn).
+		QueryRowContext(ctx)
 	return scanBlog(row)
 }
 
 func (db *Database) ListBlogs(ctx context.Context) ([]model.Blog, error) {
-	rows, err := db.conn.QueryContext(ctx, `SELECT id, name, url, feed_url, scrape_selector, last_scanned FROM blogs ORDER BY name`)
+	rows, err := sq.Select("id", "name", "url", "feed_url", "scrape_selector", "last_scanned").
+		From("blogs").
+		OrderBy("name").
+		RunWith(db.conn).
+		QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -156,29 +172,39 @@ func (db *Database) ListBlogs(ctx context.Context) ([]model.Blog, error) {
 }
 
 func (db *Database) UpdateBlog(ctx context.Context, blog model.Blog) error {
-	_, err := db.conn.ExecContext(ctx,
-		`UPDATE blogs SET name = ?, url = ?, feed_url = ?, scrape_selector = ?, last_scanned = ? WHERE id = ?`,
-		blog.Name,
-		blog.URL,
-		nullIfEmpty(blog.FeedURL),
-		nullIfEmpty(blog.ScrapeSelector),
-		formatTimePtr(blog.LastScanned),
-		blog.ID,
-	)
+	_, err := sq.Update("blogs").
+		Set("name", blog.Name).
+		Set("url", blog.URL).
+		Set("feed_url", nullIfEmpty(blog.FeedURL)).
+		Set("scrape_selector", nullIfEmpty(blog.ScrapeSelector)).
+		Set("last_scanned", formatTimePtr(blog.LastScanned)).
+		Where(sq.Eq{"id": blog.ID}).
+		RunWith(db.conn).
+		ExecContext(ctx)
 	return err
 }
 
 func (db *Database) UpdateBlogLastScanned(ctx context.Context, id int64, lastScanned time.Time) error {
-	_, err := db.conn.ExecContext(ctx, `UPDATE blogs SET last_scanned = ? WHERE id = ?`, lastScanned.Format(sqliteTimeLayout), id)
+	_, err := sq.Update("blogs").
+		Set("last_scanned", lastScanned.Format(sqliteTimeLayout)).
+		Where(sq.Eq{"id": id}).
+		RunWith(db.conn).
+		ExecContext(ctx)
 	return err
 }
 
 func (db *Database) RemoveBlog(ctx context.Context, id int64) (bool, error) {
-	_, err := db.conn.ExecContext(ctx, `DELETE FROM articles WHERE blog_id = ?`, id)
+	_, err := sq.Delete("articles").
+		Where(sq.Eq{"blog_id": id}).
+		RunWith(db.conn).
+		ExecContext(ctx)
 	if err != nil {
 		return false, err
 	}
-	result, err := db.conn.ExecContext(ctx, `DELETE FROM blogs WHERE id = ?`, id)
+	result, err := sq.Delete("blogs").
+		Where(sq.Eq{"id": id}).
+		RunWith(db.conn).
+		ExecContext(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -189,17 +215,14 @@ func (db *Database) RemoveBlog(ctx context.Context, id int64) (bool, error) {
 	return rows > 0, nil
 }
 
+// Article operations
+
 func (db *Database) AddArticle(ctx context.Context, article model.Article) (model.Article, error) {
-	result, err := db.conn.ExecContext(ctx,
-		`INSERT INTO articles (blog_id, title, url, published_date, discovered_date, is_read)
-		VALUES (?, ?, ?, ?, ?, ?)`,
-		article.BlogID,
-		article.Title,
-		article.URL,
-		formatTimePtr(article.PublishedDate),
-		formatTimePtr(article.DiscoveredDate),
-		article.IsRead,
-	)
+	result, err := sq.Insert("articles").
+		Columns("blog_id", "title", "url", "published_date", "discovered_date", "is_read").
+		Values(article.BlogID, article.Title, article.URL, formatTimePtr(article.PublishedDate), formatTimePtr(article.DiscoveredDate), article.IsRead).
+		RunWith(db.conn).
+		ExecContext(ctx)
 	if err != nil {
 		return article, err
 	}
@@ -219,21 +242,11 @@ func (db *Database) AddArticlesBulk(ctx context.Context, articles []model.Articl
 	if err != nil {
 		return 0, err
 	}
-	stmt, err := tx.PrepareContext(ctx, `INSERT INTO articles (blog_id, title, url, published_date, discovered_date, is_read) VALUES (?, ?, ?, ?, ?, ?)`)
-	if err != nil {
-		if rerr := tx.Rollback(); rerr != nil {
-			fmt.Fprintf(os.Stderr, "rollback: %v\n", rerr)
-		}
-		return 0, err
-	}
-	defer func() {
-		if err := stmt.Close(); err != nil {
-			fmt.Fprintf(os.Stderr, "close: %v\n", err)
-		}
-	}()
 
+	insert := sq.Insert("articles").
+		Columns("blog_id", "title", "url", "published_date", "discovered_date", "is_read")
 	for _, article := range articles {
-		_, err := stmt.ExecContext(ctx,
+		insert = insert.Values(
 			article.BlogID,
 			article.Title,
 			article.URL,
@@ -241,13 +254,16 @@ func (db *Database) AddArticlesBulk(ctx context.Context, articles []model.Articl
 			formatTimePtr(article.DiscoveredDate),
 			article.IsRead,
 		)
-		if err != nil {
-			if rerr := tx.Rollback(); rerr != nil {
-				fmt.Fprintf(os.Stderr, "rollback: %v\n", rerr)
-			}
-			return 0, err
-		}
 	}
+
+	_, err = insert.RunWith(tx).ExecContext(ctx)
+	if err != nil {
+		if rerr := tx.Rollback(); rerr != nil {
+			fmt.Fprintf(os.Stderr, "rollback: %v\n", rerr)
+		}
+		return 0, err
+	}
+
 	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
@@ -255,17 +271,29 @@ func (db *Database) AddArticlesBulk(ctx context.Context, articles []model.Articl
 }
 
 func (db *Database) GetArticle(ctx context.Context, id int64) (*model.Article, error) {
-	row := db.conn.QueryRowContext(ctx, `SELECT id, blog_id, title, url, published_date, discovered_date, is_read FROM articles WHERE id = ?`, id)
+	row := sq.Select("id", "blog_id", "title", "url", "published_date", "discovered_date", "is_read").
+		From("articles").
+		Where(sq.Eq{"id": id}).
+		RunWith(db.conn).
+		QueryRowContext(ctx)
 	return scanArticle(row)
 }
 
 func (db *Database) GetArticleByURL(ctx context.Context, url string) (*model.Article, error) {
-	row := db.conn.QueryRowContext(ctx, `SELECT id, blog_id, title, url, published_date, discovered_date, is_read FROM articles WHERE url = ?`, url)
+	row := sq.Select("id", "blog_id", "title", "url", "published_date", "discovered_date", "is_read").
+		From("articles").
+		Where(sq.Eq{"url": url}).
+		RunWith(db.conn).
+		QueryRowContext(ctx)
 	return scanArticle(row)
 }
 
 func (db *Database) ArticleExists(ctx context.Context, url string) (bool, error) {
-	row := db.conn.QueryRowContext(ctx, `SELECT 1 FROM articles WHERE url = ?`, url)
+	row := sq.Select("1").
+		From("articles").
+		Where(sq.Eq{"url": url}).
+		RunWith(db.conn).
+		QueryRowContext(ctx)
 	var one int
 	switch err := row.Scan(&one); {
 	case err == nil:
@@ -285,51 +313,53 @@ func (db *Database) GetExistingArticleURLs(ctx context.Context, urls []string) (
 
 	chunkSize := 900
 	for start := 0; start < len(urls); start += chunkSize {
-		end := start + chunkSize
-		if end > len(urls) {
-			end = len(urls)
-		}
+		end := min(start+chunkSize, len(urls))
 		chunk := urls[start:end]
-		placeholders := strings.TrimRight(strings.Repeat("?,", len(chunk)), ",")
-		query := fmt.Sprintf("SELECT url FROM articles WHERE url IN (%s)", placeholders)
-		if err := func() error {
-			rows, err := db.conn.QueryContext(ctx, query, interfaceSlice(chunk)...)
-			if err != nil {
-				return err
-			}
-			defer func() {
+
+		rows, err := sq.Select("url").
+			From("articles").
+			Where(sq.Eq{"url": chunk}).
+			RunWith(db.conn).
+			QueryContext(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var url string
+			if err := rows.Scan(&url); err != nil {
 				if cerr := rows.Close(); cerr != nil {
 					fmt.Fprintf(os.Stderr, "close: %v\n", cerr)
 				}
-			}()
-			for rows.Next() {
-				var url string
-				if err := rows.Scan(&url); err != nil {
-					return err
-				}
-				result[url] = struct{}{}
+				return nil, err
 			}
-			return rows.Err()
-		}(); err != nil {
+			result[url] = struct{}{}
+		}
+		if err := rows.Err(); err != nil {
+			if cerr := rows.Close(); cerr != nil {
+				fmt.Fprintf(os.Stderr, "close: %v\n", cerr)
+			}
 			return nil, err
+		}
+		if err := rows.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "close: %v\n", err)
 		}
 	}
 	return result, nil
 }
 
 func (db *Database) ListArticles(ctx context.Context, unreadOnly bool, blogID *int64) ([]model.Article, error) {
-	query := `SELECT id, blog_id, title, url, published_date, discovered_date, is_read FROM articles WHERE 1=1`
-	var args []interface{}
+	query := sq.Select("id", "blog_id", "title", "url", "published_date", "discovered_date", "is_read").
+		From("articles").
+		OrderBy("discovered_date DESC")
+
 	if unreadOnly {
-		query += " AND is_read = 0"
+		query = query.Where(sq.Eq{"is_read": false})
 	}
 	if blogID != nil {
-		query += " AND blog_id = ?"
-		args = append(args, *blogID)
+		query = query.Where(sq.Eq{"blog_id": *blogID})
 	}
-	query += " ORDER BY discovered_date DESC"
 
-	rows, err := db.conn.QueryContext(ctx, query, args...)
+	rows, err := query.RunWith(db.conn).QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -353,7 +383,11 @@ func (db *Database) ListArticles(ctx context.Context, unreadOnly bool, blogID *i
 }
 
 func (db *Database) MarkArticleRead(ctx context.Context, id int64) (bool, error) {
-	result, err := db.conn.ExecContext(ctx, `UPDATE articles SET is_read = 1 WHERE id = ?`, id)
+	result, err := sq.Update("articles").
+		Set("is_read", true).
+		Where(sq.Eq{"id": id}).
+		RunWith(db.conn).
+		ExecContext(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -365,7 +399,11 @@ func (db *Database) MarkArticleRead(ctx context.Context, id int64) (bool, error)
 }
 
 func (db *Database) MarkArticleUnread(ctx context.Context, id int64) (bool, error) {
-	result, err := db.conn.ExecContext(ctx, `UPDATE articles SET is_read = 0 WHERE id = ?`, id)
+	result, err := sq.Update("articles").
+		Set("is_read", false).
+		Where(sq.Eq{"id": id}).
+		RunWith(db.conn).
+		ExecContext(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -375,6 +413,8 @@ func (db *Database) MarkArticleUnread(ctx context.Context, id int64) (bool, erro
 	}
 	return rows > 0, nil
 }
+
+// Scan helpers
 
 func scanBlog(scanner interface{ Scan(dest ...any) error }) (*model.Blog, error) {
 	var (
@@ -445,6 +485,8 @@ func scanArticle(scanner interface{ Scan(dest ...any) error }) (*model.Article, 
 	return article, nil
 }
 
+// Value helpers
+
 func formatTimePtr(value *time.Time) *string {
 	if value == nil {
 		return nil
@@ -469,12 +511,4 @@ func nullIfEmpty(value string) *string {
 		return nil
 	}
 	return &value
-}
-
-func interfaceSlice(values []string) []interface{} {
-	result := make([]interface{}, len(values))
-	for i, value := range values {
-		result[i] = value
-	}
-	return result
 }
