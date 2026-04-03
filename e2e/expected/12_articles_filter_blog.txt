@@ -10,7 +10,6 @@ Unread articles (3):
        URL: https://go.dev/blog/slog
        Published: 2026-02-22
 
-
   [ID] [new] Type Construction and Cycle Detection
        Blog: go-blog
        URL: https://go.dev/blog/type-construction-and-cycle-detection

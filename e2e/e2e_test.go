@@ -146,6 +146,14 @@ func sortArticleBlocks(s string) string {
 	var cur []string
 	inArticles := false
 
+	// normalizeBlock strips trailing blank lines and adds exactly one.
+	normalizeBlock := func(lines []string) []string {
+		for len(lines) > 0 && lines[len(lines)-1] == "" {
+			lines = lines[:len(lines)-1]
+		}
+		return append(lines, "")
+	}
+
 	flushBlocks := func() {
 		if len(blocks) == 0 {
 			return
@@ -154,7 +162,7 @@ func sortArticleBlocks(s string) string {
 			return blocks[i].key < blocks[j].key
 		})
 		for _, b := range blocks {
-			result = append(result, b.lines...)
+			result = append(result, normalizeBlock(b.lines)...)
 		}
 		blocks = nil
 	}
