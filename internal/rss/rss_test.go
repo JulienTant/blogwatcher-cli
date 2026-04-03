@@ -100,3 +100,45 @@ func TestDiscoverFeedURL(t *testing.T) {
 	require.NoError(t, err, "discover feed")
 	require.NotEmpty(t, feedURL, "expected feed url")
 }
+
+func TestDiscoverFeedURL_XMLContentType(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/tag/AI/feed/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml; charset=UTF-8")
+		_, writeErr := w.Write([]byte(sampleFeed))
+		if writeErr != nil {
+			http.Error(w, writeErr.Error(), http.StatusInternalServerError)
+			return
+		}
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	feedURL, err := DiscoverFeedURL(context.Background(), server.URL+"/tag/AI/feed/", 2*time.Second)
+	require.NoError(t, err)
+	require.Equal(t, server.URL+"/tag/AI/feed/", feedURL, "should return URL directly for feed content-type")
+}
+
+func TestDiscoverFeedURL_RelSelf(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		_, writeErr := w.Write([]byte(`<html><head><link rel="self" type="application/rss+xml" href="/my-feed.xml" /></head></html>`))
+		if writeErr != nil {
+			http.Error(w, writeErr.Error(), http.StatusInternalServerError)
+			return
+		}
+	})
+	mux.HandleFunc("/my-feed.xml", func(w http.ResponseWriter, r *http.Request) {
+		_, writeErr := w.Write([]byte(sampleFeed))
+		if writeErr != nil {
+			http.Error(w, writeErr.Error(), http.StatusInternalServerError)
+			return
+		}
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	feedURL, err := DiscoverFeedURL(context.Background(), server.URL, 2*time.Second)
+	require.NoError(t, err)
+	require.Equal(t, server.URL+"/my-feed.xml", feedURL, "should discover feed from rel=self link")
+}
