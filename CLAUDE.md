@@ -13,19 +13,19 @@ BlogWatcher is a Go CLI tool to track blog articles, detect new posts, and manag
 go test ./...
 
 # Running the project
-go run ./cmd/blogwatcher ...
+go run ./cmd/blogwatcher-cli ...
 ```
 
 ## Architecture
 
 ### Database
-SQLite database stored at `~/.blogwatcher/blogwatcher.db` with two tables:
+SQLite database stored at `~/.blogwatcher-cli/blogwatcher-cli.db` with two tables:
 - `blogs` - Tracked blogs (name, url, feed_url, scrape_selector, last_scanned)
 - `articles` - Discovered articles (blog_id, title, url, published_date, discovered_date, is_read)
 
 
 ## Tech Stack
-- Go 1.24+
+- Go 1.26+
 - SQLite (modernc.org/sqlite)
 - gofeed (RSS/Atom)
 - goquery + net/http (HTML scraping)

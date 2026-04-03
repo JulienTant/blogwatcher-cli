@@ -12,7 +12,7 @@ import (
 
 func TestDatabaseCreatesFileAndCRUD(t *testing.T) {
 	tmp := t.TempDir()
-	path := filepath.Join(tmp, "blogwatcher.db")
+	path := filepath.Join(tmp, "blogwatcher-cli.db")
 	db, err := OpenDatabase(path)
 	require.NoError(t, err, "open database")
 	defer func() { require.NoError(t, db.Close()) }()
@@ -61,7 +61,7 @@ func TestDatabaseCreatesFileAndCRUD(t *testing.T) {
 
 func TestGetExistingArticleURLs(t *testing.T) {
 	tmp := t.TempDir()
-	path := filepath.Join(tmp, "blogwatcher.db")
+	path := filepath.Join(tmp, "blogwatcher-cli.db")
 	db, err := OpenDatabase(path)
 	require.NoError(t, err, "open database")
 	defer func() { require.NoError(t, db.Close()) }()
@@ -82,7 +82,7 @@ func TestGetExistingArticleURLs(t *testing.T) {
 
 func TestDatabaseForeignKeyEnforced(t *testing.T) {
 	tmp := t.TempDir()
-	path := filepath.Join(tmp, "blogwatcher.db")
+	path := filepath.Join(tmp, "blogwatcher-cli.db")
 	db, err := OpenDatabase(path)
 	require.NoError(t, err, "open database")
 	defer func() { require.NoError(t, db.Close()) }()
@@ -93,7 +93,7 @@ func TestDatabaseForeignKeyEnforced(t *testing.T) {
 
 func TestBlogOptionalFieldsRoundTrip(t *testing.T) {
 	tmp := t.TempDir()
-	path := filepath.Join(tmp, "blogwatcher.db")
+	path := filepath.Join(tmp, "blogwatcher-cli.db")
 	db, err := OpenDatabase(path)
 	require.NoError(t, err, "open database")
 	defer func() { require.NoError(t, db.Close()) }()
@@ -110,7 +110,7 @@ func TestBlogOptionalFieldsRoundTrip(t *testing.T) {
 
 func TestBlogTimeRoundTrip(t *testing.T) {
 	tmp := t.TempDir()
-	path := filepath.Join(tmp, "blogwatcher.db")
+	path := filepath.Join(tmp, "blogwatcher-cli.db")
 	db, err := OpenDatabase(path)
 	require.NoError(t, err, "open database")
 	defer func() { require.NoError(t, db.Close()) }()
@@ -132,7 +132,7 @@ func TestBlogTimeRoundTrip(t *testing.T) {
 
 func TestArticleTimeRoundTripAndNilDiscoveredDate(t *testing.T) {
 	tmp := t.TempDir()
-	path := filepath.Join(tmp, "blogwatcher.db")
+	path := filepath.Join(tmp, "blogwatcher-cli.db")
 	db, err := OpenDatabase(path)
 	require.NoError(t, err, "open database")
 	defer func() { require.NoError(t, db.Close()) }()
@@ -159,7 +159,7 @@ func TestArticleTimeRoundTripAndNilDiscoveredDate(t *testing.T) {
 
 func TestListArticlesFiltersAndOrdering(t *testing.T) {
 	tmp := t.TempDir()
-	path := filepath.Join(tmp, "blogwatcher.db")
+	path := filepath.Join(tmp, "blogwatcher-cli.db")
 	db, err := OpenDatabase(path)
 	require.NoError(t, err, "open database")
 	defer func() { require.NoError(t, db.Close()) }()
@@ -200,7 +200,7 @@ func TestListArticlesFiltersAndOrdering(t *testing.T) {
 
 func TestBulkInsertDuplicateRollbackAndEmpty(t *testing.T) {
 	tmp := t.TempDir()
-	path := filepath.Join(tmp, "blogwatcher.db")
+	path := filepath.Join(tmp, "blogwatcher-cli.db")
 	db, err := OpenDatabase(path)
 	require.NoError(t, err, "open database")
 	defer func() { require.NoError(t, db.Close()) }()
@@ -229,7 +229,7 @@ func TestBulkInsertDuplicateRollbackAndEmpty(t *testing.T) {
 
 func TestLookupHelpers(t *testing.T) {
 	tmp := t.TempDir()
-	path := filepath.Join(tmp, "blogwatcher.db")
+	path := filepath.Join(tmp, "blogwatcher-cli.db")
 	db, err := OpenDatabase(path)
 	require.NoError(t, err, "open database")
 	defer func() { require.NoError(t, db.Close()) }()

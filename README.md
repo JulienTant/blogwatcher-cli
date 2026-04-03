@@ -1,4 +1,4 @@
-# BlogWatcher
+# blogwatcher-cli
 
 Fork of [Hyaxia/blogwatcher](https://github.com/Hyaxia/blogwatcher).
 
@@ -16,17 +16,17 @@ A Go CLI tool to track blog articles, detect new posts, and manage read/unread s
 ## Installation
 
 ```bash
-# Homebrew (Linux)
-brew install JulienTant/tap/blogwatcher-cli
-
-# Install the CLI
+# Install via go
 go install github.com/JulienTant/blogwatcher-cli/cmd/blogwatcher-cli@latest
 
 # Or build locally
 go build ./cmd/blogwatcher-cli
+
+# Or run via Docker
+docker run --rm -v blogwatcher-cli:/data ghcr.io/julientant/blogwatcher-cli
 ```
 
-Windows and Linux binaries are also available on the GitHub Releases page.
+Pre-built binaries for Linux, macOS, and Windows are available on the [GitHub Releases](https://github.com/JulienTant/blogwatcher-cli/releases) page.
 
 ## Usage
 
@@ -99,7 +99,7 @@ blogwatcher-cli read-all --blog "Tech Blog" --yes
 
 ### Scanning Process
 
-1. For each tracked blog, BlogWatcher first attempts to parse the RSS/Atom feed
+1. For each tracked blog, blogwatcher-cli first attempts to parse the RSS/Atom feed
 2. If no feed URL is configured, it tries to auto-discover one from the blog homepage
 3. If RSS parsing fails and a `scrape_selector` is configured, it falls back to HTML scraping
 4. New articles are saved to the database as unread
@@ -107,7 +107,7 @@ blogwatcher-cli read-all --blog "Tech Blog" --yes
 
 ### Feed Auto-Discovery
 
-BlogWatcher searches for feeds in two ways:
+blogwatcher-cli searches for feeds in two ways:
 
 -   Looking for `<link rel="alternate">` tags with RSS/Atom types
 -   Checking common feed paths: `/feed`, `/rss`, `/feed.xml`, `/atom.xml`, etc.
@@ -125,9 +125,9 @@ When RSS isn't available, provide a CSS selector that matches article links:
 
 ## Database
 
-BlogWatcher stores data in SQLite at `~/.blogwatcher-cli/blogwatcher-cli.db`.
+blogwatcher-cli stores data in SQLite at `~/.blogwatcher-cli/blogwatcher-cli.db`.
 
-If upgrading from the original `blogwatcher`, migrate your existing database:
+If upgrading from the original [Hyaxia/blogwatcher](https://github.com/Hyaxia/blogwatcher), migrate your existing database:
 
 ```bash
 mv ~/.blogwatcher/blogwatcher.db ~/.blogwatcher-cli/blogwatcher-cli.db
@@ -142,7 +142,7 @@ Tables:
 
 ### Requirements
 
--   Go 1.24+
+-   Go 1.26+
 
 ### Running Tests
 
@@ -153,10 +153,11 @@ go test ./...
 
 ### Publishing
 
-in addition to publishing to main a new tag should be published so homebrew will get the updated version:
-```
-  git tag vX.Y.Z
-  git push origin vX.Y.Z
+Push a tag to trigger a release (binaries + Docker images to GHCR):
+
+```bash
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```
 
 ## License
