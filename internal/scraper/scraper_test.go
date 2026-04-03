@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestScrapeBlog(t *testing.T) {
@@ -19,18 +21,16 @@ func TestScrapeBlog(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(html))
+		if _, writeErr := w.Write([]byte(html)); writeErr != nil {
+			http.Error(w, writeErr.Error(), http.StatusInternalServerError)
+			return
+		}
 	}))
 	defer server.Close()
 
 	articles, err := ScrapeBlog(server.URL, "article h2 a, .post", 2*time.Second)
-	if err != nil {
-		t.Fatalf("scrape blog: %v", err)
-	}
-	if len(articles) != 2 {
-		t.Fatalf("expected 2 articles, got %d", len(articles))
-	}
-	if articles[0].URL == "" || articles[1].URL == "" {
-		t.Fatalf("expected URLs")
-	}
+	require.NoError(t, err, "scrape blog")
+	require.Len(t, articles, 2)
+	require.NotEqual(t, "", articles[0].URL)
+	require.NotEqual(t, "", articles[1].URL)
 }

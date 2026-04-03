@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"net/url"
 	"strings"
 	"time"
@@ -32,7 +33,11 @@ func ParseFeed(feedURL string, timeout time.Duration) ([]FeedArticle, error) {
 	if err != nil {
 		return nil, FeedParseError{Message: fmt.Sprintf("failed to fetch feed: %v", err)}
 	}
-	defer response.Body.Close()
+	defer func() {
+		if err := response.Body.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "close: %v\n", err)
+		}
+	}()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return nil, FeedParseError{Message: fmt.Sprintf("failed to fetch feed: status %d", response.StatusCode)}
 	}
@@ -66,7 +71,11 @@ func DiscoverFeedURL(blogURL string, timeout time.Duration) (string, error) {
 	if err != nil {
 		return "", nil
 	}
-	defer response.Body.Close()
+	defer func() {
+		if err := response.Body.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "close: %v\n", err)
+		}
+	}()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return "", nil
 	}
@@ -135,7 +144,11 @@ func isValidFeed(feedURL string, timeout time.Duration) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer response.Body.Close()
+	defer func() {
+		if err := response.Body.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "close: %v\n", err)
+		}
+	}()
 	if response.StatusCode != http.StatusOK {
 		return false, nil
 	}

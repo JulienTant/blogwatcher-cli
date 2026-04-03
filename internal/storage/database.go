@@ -50,7 +50,9 @@ func OpenDatabase(path string) (*Database, error) {
 
 	db := &Database{path: path, conn: conn}
 	if err := db.init(); err != nil {
-		_ = conn.Close()
+		if cerr := conn.Close(); cerr != nil {
+			fmt.Fprintf(os.Stderr, "close: %v\n", cerr)
+		}
 		return nil, err
 	}
 	return db, nil
@@ -133,7 +135,11 @@ func (db *Database) ListBlogs() ([]model.Blog, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "close rows: %v\n", err)
+		}
+	}()
 
 	var blogs []model.Blog
 	for rows.Next() {
@@ -214,10 +220,16 @@ func (db *Database) AddArticlesBulk(articles []model.Article) (int, error) {
 	}
 	stmt, err := _tx.Prepare(`INSERT INTO articles (blog_id, title, url, published_date, discovered_date, is_read) VALUES (?, ?, ?, ?, ?, ?)`)
 	if err != nil {
-		_ = _tx.Rollback()
+		if rerr := _tx.Rollback(); rerr != nil {
+			fmt.Fprintf(os.Stderr, "rollback: %v\n", rerr)
+		}
 		return 0, err
 	}
-	defer stmt.Close()
+	defer func() {
+		if err := stmt.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "close: %v\n", err)
+		}
+	}()
 
 	for _, article := range articles {
 		_, err := stmt.Exec(
@@ -229,7 +241,9 @@ func (db *Database) AddArticlesBulk(articles []model.Article) (int, error) {
 			article.IsRead,
 		)
 		if err != nil {
-			_ = _tx.Rollback()
+			if rerr := _tx.Rollback(); rerr != nil {
+				fmt.Fprintf(os.Stderr, "rollback: %v\n", rerr)
+			}
 			return 0, err
 		}
 	}
@@ -284,16 +298,22 @@ func (db *Database) GetExistingArticleURLs(urls []string) (map[string]struct{}, 
 		for rows.Next() {
 			var url string
 			if err := rows.Scan(&url); err != nil {
-				rows.Close()
+				if cerr := rows.Close(); cerr != nil {
+					fmt.Fprintf(os.Stderr, "close: %v\n", cerr)
+				}
 				return nil, err
 			}
 			result[url] = struct{}{}
 		}
 		if err := rows.Err(); err != nil {
-			rows.Close()
+			if cerr := rows.Close(); cerr != nil {
+				fmt.Fprintf(os.Stderr, "close: %v\n", cerr)
+			}
 			return nil, err
 		}
-		rows.Close()
+		if err := rows.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "close: %v\n", err)
+		}
 	}
 	return result, nil
 }
@@ -314,7 +334,11 @@ func (db *Database) ListArticles(unreadOnly bool, blogID *int64) ([]model.Articl
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "close rows: %v\n", err)
+		}
+	}()
 
 	var articles []model.Article
 	for rows.Next() {

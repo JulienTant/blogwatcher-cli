@@ -6,95 +6,66 @@ import (
 
 	"github.com/JulienTant/blogwatcher-cli/internal/model"
 	"github.com/JulienTant/blogwatcher-cli/internal/storage"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAddBlogAndRemoveBlog(t *testing.T) {
 	db := openTestDB(t)
-	defer db.Close()
+	defer func() { require.NoError(t, db.Close()) }()
 
 	blog, err := AddBlog(db, "Test", "https://example.com", "", "")
-	if err != nil {
-		t.Fatalf("add blog: %v", err)
-	}
+	require.NoError(t, err, "add blog")
 
-	if _, err := AddBlog(db, "Test", "https://other.com", "", ""); err == nil {
-		t.Fatalf("expected duplicate name error")
-	}
+	_, err = AddBlog(db, "Test", "https://other.com", "", "")
+	require.Error(t, err, "expected duplicate name error")
 
-	if _, err := AddBlog(db, "Other", "https://example.com", "", ""); err == nil {
-		t.Fatalf("expected duplicate url error")
-	}
+	_, err = AddBlog(db, "Other", "https://example.com", "", "")
+	require.Error(t, err, "expected duplicate url error")
 
-	if err := RemoveBlog(db, blog.Name); err != nil {
-		t.Fatalf("remove blog: %v", err)
-	}
+	err = RemoveBlog(db, blog.Name)
+	require.NoError(t, err, "remove blog")
 }
 
 func TestArticleReadUnread(t *testing.T) {
 	db := openTestDB(t)
-	defer db.Close()
+	defer func() { require.NoError(t, db.Close()) }()
 
 	blog, err := AddBlog(db, "Test", "https://example.com", "", "")
-	if err != nil {
-		t.Fatalf("add blog: %v", err)
-	}
+	require.NoError(t, err, "add blog")
 	article, err := db.AddArticle(model.Article{BlogID: blog.ID, Title: "Title", URL: "https://example.com/1"})
-	if err != nil {
-		t.Fatalf("add article: %v", err)
-	}
+	require.NoError(t, err, "add article")
 
 	read, err := MarkArticleRead(db, article.ID)
-	if err != nil {
-		t.Fatalf("mark read: %v", err)
-	}
-	if read.IsRead {
-		t.Fatalf("expected original state unread")
-	}
+	require.NoError(t, err, "mark read")
+	require.False(t, read.IsRead, "expected original state unread")
 
 	unread, err := MarkArticleUnread(db, article.ID)
-	if err != nil {
-		t.Fatalf("mark unread: %v", err)
-	}
-	if !unread.IsRead {
-		t.Fatalf("expected original state read")
-	}
+	require.NoError(t, err, "mark unread")
+	require.True(t, unread.IsRead, "expected original state read")
 }
 
 func TestGetArticlesFilters(t *testing.T) {
 	db := openTestDB(t)
-	defer db.Close()
+	defer func() { require.NoError(t, db.Close()) }()
 
 	blog, err := AddBlog(db, "Test", "https://example.com", "", "")
-	if err != nil {
-		t.Fatalf("add blog: %v", err)
-	}
+	require.NoError(t, err, "add blog")
 	_, err = db.AddArticle(model.Article{BlogID: blog.ID, Title: "Title", URL: "https://example.com/1"})
-	if err != nil {
-		t.Fatalf("add article: %v", err)
-	}
+	require.NoError(t, err, "add article")
 
 	articles, blogNames, err := GetArticles(db, false, "")
-	if err != nil {
-		t.Fatalf("get articles: %v", err)
-	}
-	if len(articles) != 1 {
-		t.Fatalf("expected article")
-	}
-	if blogNames[blog.ID] != blog.Name {
-		t.Fatalf("expected blog name")
-	}
+	require.NoError(t, err, "get articles")
+	require.Len(t, articles, 1)
+	require.Equal(t, blog.Name, blogNames[blog.ID])
 
-	if _, _, err := GetArticles(db, false, "Missing"); err == nil {
-		t.Fatalf("expected blog not found error")
-	}
+	_, _, err = GetArticles(db, false, "Missing")
+	require.Error(t, err, "expected blog not found error")
 }
 
 func openTestDB(t *testing.T) *storage.Database {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "blogwatcher.db")
 	db, err := storage.OpenDatabase(path)
-	if err != nil {
-		t.Fatalf("open database: %v", err)
-	}
+	require.NoError(t, err, "open database")
 	return db
 }
