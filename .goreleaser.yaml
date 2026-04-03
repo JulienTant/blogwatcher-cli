@@ -38,6 +38,9 @@ changelog:
       - '^docs:'
       - '^test:'
 
+snapshot:
+  version_template: "main"
+
 dockers:
   - image_templates:
       - "ghcr.io/julientant/blogwatcher-cli:{{ .Version }}-amd64"
