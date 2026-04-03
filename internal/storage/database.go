@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
@@ -219,8 +220,8 @@ func (db *Database) RemoveBlog(ctx context.Context, id int64) (bool, error) {
 
 func (db *Database) AddArticle(ctx context.Context, article model.Article) (model.Article, error) {
 	result, err := sq.Insert("articles").
-		Columns("blog_id", "title", "url", "published_date", "discovered_date", "is_read").
-		Values(article.BlogID, article.Title, article.URL, formatTimePtr(article.PublishedDate), formatTimePtr(article.DiscoveredDate), article.IsRead).
+		Columns("blog_id", "title", "url", "published_date", "discovered_date", "is_read", "categories").
+		Values(article.BlogID, article.Title, article.URL, formatTimePtr(article.PublishedDate), formatTimePtr(article.DiscoveredDate), article.IsRead, categoriesToString(article.Categories)).
 		RunWith(db.conn).
 		ExecContext(ctx)
 	if err != nil {
@@ -244,7 +245,7 @@ func (db *Database) AddArticlesBulk(ctx context.Context, articles []model.Articl
 	}
 
 	insert := sq.Insert("articles").
-		Columns("blog_id", "title", "url", "published_date", "discovered_date", "is_read")
+		Columns("blog_id", "title", "url", "published_date", "discovered_date", "is_read", "categories")
 	for _, article := range articles {
 		insert = insert.Values(
 			article.BlogID,
@@ -253,6 +254,7 @@ func (db *Database) AddArticlesBulk(ctx context.Context, articles []model.Articl
 			formatTimePtr(article.PublishedDate),
 			formatTimePtr(article.DiscoveredDate),
 			article.IsRead,
+			categoriesToString(article.Categories),
 		)
 	}
 
@@ -271,7 +273,7 @@ func (db *Database) AddArticlesBulk(ctx context.Context, articles []model.Articl
 }
 
 func (db *Database) GetArticle(ctx context.Context, id int64) (*model.Article, error) {
-	row := sq.Select("id", "blog_id", "title", "url", "published_date", "discovered_date", "is_read").
+	row := sq.Select("id", "blog_id", "title", "url", "published_date", "discovered_date", "is_read", "categories").
 		From("articles").
 		Where(sq.Eq{"id": id}).
 		RunWith(db.conn).
@@ -280,7 +282,7 @@ func (db *Database) GetArticle(ctx context.Context, id int64) (*model.Article, e
 }
 
 func (db *Database) GetArticleByURL(ctx context.Context, url string) (*model.Article, error) {
-	row := sq.Select("id", "blog_id", "title", "url", "published_date", "discovered_date", "is_read").
+	row := sq.Select("id", "blog_id", "title", "url", "published_date", "discovered_date", "is_read", "categories").
 		From("articles").
 		Where(sq.Eq{"url": url}).
 		RunWith(db.conn).
@@ -347,8 +349,8 @@ func (db *Database) GetExistingArticleURLs(ctx context.Context, urls []string) (
 	return result, nil
 }
 
-func (db *Database) ListArticles(ctx context.Context, unreadOnly bool, blogID *int64) ([]model.Article, error) {
-	query := sq.Select("id", "blog_id", "title", "url", "published_date", "discovered_date", "is_read").
+func (db *Database) ListArticles(ctx context.Context, unreadOnly bool, blogID *int64, category *string) ([]model.Article, error) {
+	query := sq.Select("id", "blog_id", "title", "url", "published_date", "discovered_date", "is_read", "categories").
 		From("articles").
 		OrderBy("discovered_date DESC")
 
@@ -357,6 +359,9 @@ func (db *Database) ListArticles(ctx context.Context, unreadOnly bool, blogID *i
 	}
 	if blogID != nil {
 		query = query.Where(sq.Eq{"blog_id": *blogID})
+	}
+	if category != nil && *category != "" {
+		query = query.Where(sq.Like{"categories": "%" + *category + "%"})
 	}
 
 	rows, err := query.RunWith(db.conn).QueryContext(ctx)
@@ -456,8 +461,9 @@ func scanArticle(scanner interface{ Scan(dest ...any) error }) (*model.Article, 
 		publishedDate sql.NullString
 		discovered    sql.NullString
 		isRead        bool
+		categories    sql.NullString
 	)
-	if err := scanner.Scan(&id, &blogID, &title, &url, &publishedDate, &discovered, &isRead); err != nil {
+	if err := scanner.Scan(&id, &blogID, &title, &url, &publishedDate, &discovered, &isRead, &categories); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
@@ -465,11 +471,12 @@ func scanArticle(scanner interface{ Scan(dest ...any) error }) (*model.Article, 
 	}
 
 	article := &model.Article{
-		ID:     id,
-		BlogID: blogID,
-		Title:  title,
-		URL:    url,
-		IsRead: isRead,
+		ID:         id,
+		BlogID:     blogID,
+		Title:      title,
+		URL:        url,
+		IsRead:     isRead,
+		Categories: categoriesFromString(categories),
 	}
 	if publishedDate.Valid {
 		if parsed, err := parseTime(publishedDate.String); err == nil {
@@ -511,4 +518,19 @@ func nullIfEmpty(value string) *string {
 		return nil
 	}
 	return &value
+}
+
+func categoriesToString(categories []string) *string {
+	if len(categories) == 0 {
+		return nil
+	}
+	s := strings.Join(categories, ",")
+	return &s
+}
+
+func categoriesFromString(s sql.NullString) []string {
+	if !s.Valid || s.String == "" {
+		return nil
+	}
+	return strings.Split(s.String, ",")
 }

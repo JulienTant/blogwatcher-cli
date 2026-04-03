@@ -66,7 +66,7 @@ func RemoveBlog(ctx context.Context, db *storage.Database, name string) error {
 	return err
 }
 
-func GetArticles(ctx context.Context, db *storage.Database, showAll bool, blogName string) ([]model.Article, map[int64]string, error) {
+func GetArticles(ctx context.Context, db *storage.Database, showAll bool, blogName string, category string) ([]model.Article, map[int64]string, error) {
 	var blogID *int64
 	if blogName != "" {
 		blog, err := db.GetBlogByName(ctx, blogName)
@@ -79,7 +79,12 @@ func GetArticles(ctx context.Context, db *storage.Database, showAll bool, blogNa
 		blogID = &blog.ID
 	}
 
-	articles, err := db.ListArticles(ctx, !showAll, blogID)
+	var categoryPtr *string
+	if category != "" {
+		categoryPtr = &category
+	}
+
+	articles, err := db.ListArticles(ctx, !showAll, blogID, categoryPtr)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -125,7 +130,7 @@ func MarkAllArticlesRead(ctx context.Context, db *storage.Database, blogName str
 		blogID = &blog.ID
 	}
 
-	articles, err := db.ListArticles(ctx, true, blogID)
+	articles, err := db.ListArticles(ctx, true, blogID, nil)
 	if err != nil {
 		return nil, err
 	}
