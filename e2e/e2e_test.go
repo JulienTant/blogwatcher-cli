@@ -406,6 +406,49 @@ func TestE2E(t *testing.T) {
 	}
 }
 
+func TestImportOPML(t *testing.T) {
+	baseURL := startTestServer(t)
+
+	for _, mode := range []string{"flags", "env"} {
+		t.Run(mode, func(t *testing.T) {
+			c := &cliOpts{
+				mode:   mode,
+				dbPath: filepath.Join(t.TempDir(), "test.db"),
+			}
+
+			// Write an OPML file with feeds pointing at the test server.
+			opmlContent := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<opml version="1.0">
+    <head><title>Test Subscriptions</title></head>
+    <body>
+        <outline text="Tech" title="Tech">
+            <outline type="rss" text="Go Blog" title="Go Blog" xmlUrl="%s/go/feed.atom" htmlUrl="%s/go/"/>
+            <outline type="rss" text="GitHub Blog" title="GitHub Blog" xmlUrl="%s/github/feed/" htmlUrl="%s/github/"/>
+        </outline>
+    </body>
+</opml>`, baseURL, baseURL, baseURL, baseURL)
+			opmlPath := filepath.Join(t.TempDir(), "subs.opml")
+			err := os.WriteFile(opmlPath, []byte(opmlContent), 0o644)
+			require.NoError(t, err)
+
+			// Import the OPML file.
+			out := c.ok(t, []string{"import", opmlPath}, nil)
+			checkOutput(t, "30_import_opml", out, baseURL)
+
+			// Verify blogs appear in list.
+			out = c.ok(t, []string{"blogs"}, nil)
+			checkOutput(t, "31_import_blogs_listed", out, baseURL)
+
+			// Re-import the same file -- all should be skipped as duplicates.
+			out = c.ok(t, []string{"import", opmlPath}, nil)
+			checkOutput(t, "32_import_opml_duplicates", out, baseURL)
+
+			// Import a nonexistent file should fail.
+			c.fail(t, []string{"import", "/nonexistent/file.opml"}, nil)
+		})
+	}
+}
+
 func TestSSRFProtection(t *testing.T) {
 	baseURL := startTestServer(t)
 	dbPath := filepath.Join(t.TempDir(), "test.db")

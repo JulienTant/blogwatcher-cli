@@ -2,9 +2,13 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"strings"
 
 	"github.com/JulienTant/blogwatcher-cli/internal/model"
+	"github.com/JulienTant/blogwatcher-cli/internal/opml"
 	"github.com/JulienTant/blogwatcher-cli/internal/storage"
 )
 
@@ -143,6 +147,34 @@ func MarkAllArticlesRead(ctx context.Context, db *storage.Database, blogName str
 	}
 
 	return articles, nil
+}
+
+func ImportOPML(ctx context.Context, db *storage.Database, r io.Reader) (added int, skipped int, err error) {
+	feeds, err := opml.Parse(r)
+	if err != nil {
+		return 0, 0, err
+	}
+	for _, feed := range feeds {
+		siteURL := feed.SiteURL
+		if siteURL == "" {
+			siteURL = feed.FeedURL
+		}
+		title := strings.TrimSpace(feed.Title)
+		if title == "" {
+			title = siteURL
+		}
+		_, err := AddBlog(ctx, db, title, siteURL, feed.FeedURL, "")
+		if err != nil {
+			var alreadyExists BlogAlreadyExistsError
+			if errors.As(err, &alreadyExists) {
+				skipped++
+				continue
+			}
+			return added, skipped, err
+		}
+		added++
+	}
+	return added, skipped, nil
 }
 
 func MarkArticleUnread(ctx context.Context, db *storage.Database, articleID int64) (model.Article, error) {

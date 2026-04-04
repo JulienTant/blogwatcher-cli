@@ -1,0 +1,10 @@
+Tracked blogs (2):
+
+  GitHub Blog
+    URL: {{SERVER}}/github/
+    Feed: {{SERVER}}/github/feed/
+
+  Go Blog
+    URL: {{SERVER}}/go/
+    Feed: {{SERVER}}/go/feed.atom
+

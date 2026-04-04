@@ -34,6 +34,7 @@ func NewRootCommand() *cobra.Command {
 	rootCmd.AddCommand(newReadCommand())
 	rootCmd.AddCommand(newReadAllCommand())
 	rootCmd.AddCommand(newUnreadCommand())
+	rootCmd.AddCommand(newImportCommand())
 	return rootCmd
 }
 
