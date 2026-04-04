@@ -529,6 +529,65 @@ func TestScanPartialFailure(t *testing.T) {
 	}
 }
 
+func TestScanSilentPartialFailure(t *testing.T) {
+	baseURL := startTestServer(t)
+
+	badServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer badServer.Close()
+
+	for _, mode := range []string{"flags", "env"} {
+		t.Run(mode, func(t *testing.T) {
+			c := &cliOpts{
+				mode:   mode,
+				dbPath: filepath.Join(t.TempDir(), "test.db"),
+			}
+
+			c.ok(t, []string{"add", "good-blog", baseURL + "/go/"}, map[string]string{
+				"feed-url": baseURL + "/go/feed.atom",
+			})
+			c.ok(t, []string{"add", "bad-blog", badServer.URL}, map[string]string{
+				"feed-url": badServer.URL + "/feed",
+			})
+
+			// Partial failure in silent mode: should still print "scan done" and exit 0.
+			stdout, stderr, code := c.run(t, []string{"scan"}, map[string]string{"silent": ""})
+			assert.Equal(t, 0, code, "partial failure should exit 0")
+			assert.Contains(t, stdout, "scan done")
+			assert.Contains(t, stderr, "1/2 blog(s) failed")
+		})
+	}
+}
+
+func TestScanSilentTotalFailure(t *testing.T) {
+	badServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer badServer.Close()
+
+	for _, mode := range []string{"flags", "env"} {
+		t.Run(mode, func(t *testing.T) {
+			c := &cliOpts{
+				mode:   mode,
+				dbPath: filepath.Join(t.TempDir(), "test.db"),
+			}
+
+			c.ok(t, []string{"add", "bad-blog-1", badServer.URL + "/a"}, map[string]string{
+				"feed-url": badServer.URL + "/feed1",
+			})
+			c.ok(t, []string{"add", "bad-blog-2", badServer.URL + "/b"}, map[string]string{
+				"feed-url": badServer.URL + "/feed2",
+			})
+
+			// Total failure in silent mode: should exit non-zero.
+			_, stderr, code := c.run(t, []string{"scan"}, map[string]string{"silent": ""})
+			assert.NotEqual(t, 0, code, "total failure should exit non-zero")
+			assert.Contains(t, stderr, "2/2 blog(s) failed")
+		})
+	}
+}
+
 func extractFirstID(t *testing.T, output string) string {
 	t.Helper()
 	re := regexp.MustCompile(`\[(\d+)\]`)

@@ -96,8 +96,11 @@ func (f *Fetcher) DiscoverFeedURL(ctx context.Context, blogURL string) (string, 
 			fmt.Fprintf(os.Stderr, "close: %v\n", err)
 		}
 	}()
+	if response.StatusCode >= 500 {
+		return "", FeedParseError{Message: fmt.Sprintf("discover feed: server error status %d", response.StatusCode)}
+	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		// Not-found / bad status is not an error — just means no feed at this URL.
+		// Client errors (4xx) are not transient — just means no feed at this URL.
 		return "", nil
 	}
 

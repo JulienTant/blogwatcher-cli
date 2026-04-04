@@ -366,6 +366,52 @@ func TestScanAllBlogsPartialFailureSequential(t *testing.T) {
 	require.Contains(t, bad.Error, "failed to fetch feed")
 }
 
+func TestScanAllBlogsPropagatesContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cancel() // cancel context while handling request
+		w.WriteHeader(http.StatusOK)
+		if _, writeErr := w.Write([]byte(sampleFeed)); writeErr != nil {
+			http.Error(w, writeErr.Error(), http.StatusInternalServerError)
+		}
+	}))
+	defer server.Close()
+
+	db := openTestDB(t)
+	defer func() { require.NoError(t, db.Close()) }()
+
+	_, err := db.AddBlog(ctx, model.Blog{Name: "cancel-blog", URL: "https://cancel.example.com", FeedURL: server.URL})
+	require.NoError(t, err)
+
+	_, scanErr := newTestScanner().ScanAllBlogs(ctx, db, 1)
+	require.Error(t, scanErr, "should propagate context cancellation as a fatal error")
+	require.ErrorIs(t, scanErr, context.Canceled)
+}
+
+func TestScanAllBlogsPropagatesContextCancellationConcurrent(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cancel()
+		w.WriteHeader(http.StatusOK)
+		if _, writeErr := w.Write([]byte(sampleFeed)); writeErr != nil {
+			http.Error(w, writeErr.Error(), http.StatusInternalServerError)
+		}
+	}))
+	defer server.Close()
+
+	db := openTestDB(t)
+	defer func() { require.NoError(t, db.Close()) }()
+
+	_, err := db.AddBlog(ctx, model.Blog{Name: "cancel-blog", URL: "https://cancel.example.com", FeedURL: server.URL})
+	require.NoError(t, err)
+
+	_, scanErr := newTestScanner().ScanAllBlogs(ctx, db, 2)
+	require.Error(t, scanErr, "should propagate context cancellation as a fatal error")
+	require.ErrorIs(t, scanErr, context.Canceled)
+}
+
 func ptrTime(value time.Time) *time.Time {
 	return &value
 }

@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -37,6 +38,22 @@ type Scanner struct {
 // NewScanner creates a Scanner with the given fetcher and scraper.
 func NewScanner(fetcher *rss.Fetcher, scraper *scraper.Scraper) *Scanner {
 	return &Scanner{fetcher: fetcher, scraper: scraper}
+}
+
+// isFatalScanError returns true for errors that should abort the entire scan
+// (context cancellation, DB errors) rather than being recorded as per-blog failures.
+func isFatalScanError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	// Feed/scrape errors are recoverable — everything else (DB errors) is fatal.
+	if rss.IsFeedError(err) || scraper.IsScrapeError(err) {
+		return false
+	}
+	return true
 }
 
 // retryHTTP retries a transient HTTP operation with exponential backoff.
@@ -170,6 +187,9 @@ func (s *Scanner) ScanAllBlogs(ctx context.Context, db *storage.Database, worker
 		for _, blog := range blogs {
 			result, scanErr := s.ScanBlog(ctx, db, blog)
 			if scanErr != nil {
+				if isFatalScanError(scanErr) {
+					return nil, fmt.Errorf("scan %s: %w", blog.Name, scanErr)
+				}
 				result.BlogName = blog.Name
 				result.Error = scanErr.Error()
 			}
@@ -201,6 +221,9 @@ func (s *Scanner) ScanAllBlogs(ctx context.Context, db *storage.Database, worker
 			for item := range jobs {
 				result, scanErr := s.ScanBlog(gctx, workerDB, item.Blog)
 				if scanErr != nil {
+					if isFatalScanError(scanErr) {
+						return fmt.Errorf("scan %s: %w", item.Blog.Name, scanErr)
+					}
 					result.BlogName = item.Blog.Name
 					result.Error = scanErr.Error()
 				}

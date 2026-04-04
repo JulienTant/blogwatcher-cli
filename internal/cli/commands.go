@@ -216,6 +216,13 @@ func newScanCommand() *cobra.Command {
 					} else if failed == 0 {
 						cprintln([]color.Attribute{color.FgYellow}, "No new articles found.")
 					}
+				} else {
+					if failed > 0 {
+						fmt.Fprintf(os.Stderr, "scan: %d/%d blog(s) failed\n", failed, len(results))
+					}
+					if failed == len(results) {
+						return fmt.Errorf("scan failed: all %d blog(s) failed", failed)
+					}
 				}
 			}
 
