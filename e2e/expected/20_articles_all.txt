@@ -12,11 +12,13 @@ All articles (11):
        Blog: github-blog
        URL: https://github.blog/news-insights/github-copilot-the-agent-awakens/
        Published: 2026-04-01
+       Categories: AI, Copilot
 
   [ID] [read] How we built the new GitHub Issues
        Blog: github-blog
        URL: https://github.blog/engineering/how-we-built-the-new-github-issues/
        Published: 2026-03-28
+       Categories: Engineering
 
   [ID] [read] More powerful Go execution traces
        Blog: go-blog
@@ -36,6 +38,7 @@ All articles (11):
        Blog: github-blog
        URL: https://github.blog/engineering/the-uphill-climb-of-making-diff-lines-performant/
        Published: 2026-04-03
+       Categories: Engineering, Performance
 
   [ID] [read] Type Construction and Cycle Detection
        Blog: go-blog

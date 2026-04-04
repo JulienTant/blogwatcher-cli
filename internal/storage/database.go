@@ -361,7 +361,14 @@ func (db *Database) ListArticles(ctx context.Context, unreadOnly bool, blogID *i
 		query = query.Where(sq.Eq{"blog_id": *blogID})
 	}
 	if category != nil && *category != "" {
-		query = query.Where(sq.Like{"categories": "%" + *category + "%"})
+		// Categories are stored as comma-separated values. Use delimited
+		// matching to avoid partial matches (e.g. "AI" matching "FAIR").
+		query = query.Where(sq.Or{
+			sq.Eq{"categories": *category},                 // exact single category
+			sq.Like{"categories": *category + ",%"},        // starts with
+			sq.Like{"categories": "%," + *category},        // ends with
+			sq.Like{"categories": "%," + *category + ",%"}, // middle
+		})
 	}
 
 	rows, err := query.RunWith(db.conn).QueryContext(ctx)
