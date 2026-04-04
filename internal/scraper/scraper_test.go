@@ -10,6 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func newTestScraper() *Scraper {
+	return NewScraper(&http.Client{Timeout: 2 * time.Second})
+}
+
 func TestScrapeBlog(t *testing.T) {
 	html := `<!DOCTYPE html>
 <html>
@@ -28,7 +32,7 @@ func TestScrapeBlog(t *testing.T) {
 	}))
 	defer server.Close()
 
-	articles, err := ScrapeBlog(context.Background(), server.URL, "article h2 a, .post", 2*time.Second)
+	articles, err := newTestScraper().ScrapeBlog(context.Background(), server.URL, "article h2 a, .post")
 	require.NoError(t, err, "scrape blog")
 	require.Len(t, articles, 2)
 	require.NotEmpty(t, articles[0].URL)

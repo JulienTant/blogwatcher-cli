@@ -59,12 +59,12 @@ func TestGetArticlesFilters(t *testing.T) {
 	_, err = db.AddArticle(ctx, model.Article{BlogID: blog.ID, Title: "Title", URL: "https://example.com/1"})
 	require.NoError(t, err, "add article")
 
-	articles, blogNames, err := GetArticles(ctx, db, false, "")
+	articles, blogNames, err := GetArticles(ctx, db, false, "", "")
 	require.NoError(t, err, "get articles")
 	require.Len(t, articles, 1)
 	require.Equal(t, blog.Name, blogNames[blog.ID])
 
-	_, _, err = GetArticles(ctx, db, false, "Missing")
+	_, _, err = GetArticles(ctx, db, false, "Missing", "")
 	require.Error(t, err, "expected blog not found error")
 }
 
@@ -151,6 +151,31 @@ func TestImportOPMLInvalidXML(t *testing.T) {
 
 	_, _, err := ImportOPML(ctx, db, strings.NewReader("not xml"))
 	require.Error(t, err)
+}
+
+func TestGetArticlesFilterByCategory(t *testing.T) {
+	ctx := context.Background()
+	db := openTestDB(t)
+	defer func() { require.NoError(t, db.Close()) }()
+
+	blog, err := AddBlog(ctx, db, "Test", "https://example.com", "", "")
+	require.NoError(t, err, "add blog")
+
+	_, err = db.AddArticle(ctx, model.Article{BlogID: blog.ID, Title: "Go Post", URL: "https://example.com/1", Categories: []string{"Go", "Programming"}})
+	require.NoError(t, err, "add article")
+	_, err = db.AddArticle(ctx, model.Article{BlogID: blog.ID, Title: "Rust Post", URL: "https://example.com/2", Categories: []string{"Rust"}})
+	require.NoError(t, err, "add article")
+
+	// Filter by Go
+	articles, _, err := GetArticles(ctx, db, false, "", "Go")
+	require.NoError(t, err, "get articles by category")
+	require.Len(t, articles, 1)
+	require.Equal(t, "Go Post", articles[0].Title)
+
+	// No filter returns all
+	all, _, err := GetArticles(ctx, db, false, "", "")
+	require.NoError(t, err, "get all articles")
+	require.Len(t, all, 2)
 }
 
 func openTestDB(t *testing.T) *storage.Database {
