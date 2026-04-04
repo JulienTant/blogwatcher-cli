@@ -114,7 +114,7 @@ func TestDiscoverFeedURL_XMLContentType(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	feedURL, err := DiscoverFeedURL(context.Background(), server.URL+"/tag/AI/feed/", 2*time.Second)
+	feedURL, err := newTestFetcher().DiscoverFeedURL(context.Background(), server.URL+"/tag/AI/feed/")
 	require.NoError(t, err)
 	require.Equal(t, server.URL+"/tag/AI/feed/", feedURL, "should return URL directly for feed content-type")
 }
@@ -138,7 +138,7 @@ func TestDiscoverFeedURL_RelSelf(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	feedURL, err := DiscoverFeedURL(context.Background(), server.URL, 2*time.Second)
+	feedURL, err := newTestFetcher().DiscoverFeedURL(context.Background(), server.URL)
 	require.NoError(t, err)
 	require.Equal(t, server.URL+"/my-feed.xml", feedURL, "should discover feed from rel=self link")
 }
