@@ -35,6 +35,8 @@ Track blog and RSS/Atom feed updates with the `blogwatcher-cli` tool. Supports a
 - Mark all articles read: `blogwatcher-cli read-all`
 - Mark all read for a blog: `blogwatcher-cli read-all --blog "My Blog" --yes`
 - Remove a blog: `blogwatcher-cli remove "My Blog" --yes`
+- Import blogs from OPML: `blogwatcher-cli import subscriptions.opml`
+- Filter by category: `blogwatcher-cli articles --category "Engineering"`
 
 ## Environment variables
 
@@ -44,6 +46,7 @@ All flags can be set via environment variables with the `BLOGWATCHER_` prefix:
 - `BLOGWATCHER_WORKERS` - Number of concurrent scan workers (default: 8)
 - `BLOGWATCHER_SILENT` - Only output "scan done" when scanning
 - `BLOGWATCHER_YES` - Skip confirmation prompts
+- `BLOGWATCHER_CATEGORY` - Filter articles by category
 
 ## Example output
 
@@ -75,15 +78,19 @@ Unread articles (2):
        Blog: xkcd
        URL: https://xkcd.com/3095/
        Published: 2026-04-02
+       Categories: Comics, Science
 
   [2] [new] Volcano Fact
        Blog: xkcd
        URL: https://xkcd.com/3094/
        Published: 2026-04-01
+       Categories: Comics
 ```
 
 ## Notes
 
+- Import blogs in bulk from OPML files exported by Feedly, Inoreader, NewsBlur, etc.
+- Categories from RSS/Atom feeds are stored and can be used to filter articles.
 - blogwatcher-cli auto-discovers RSS/Atom feeds from blog homepages when no `--feed-url` is provided.
 - If RSS fails and `--scrape-selector` is configured, it falls back to HTML scraping.
 - Database is stored at `~/.blogwatcher-cli/blogwatcher-cli.db` by default (override with `--db` or `BLOGWATCHER_DB`).

@@ -34,11 +34,11 @@ checksum:
   name_template: "{{ .ProjectName }}_checksums.txt"
 
 changelog:
-  sort: asc
-  filters:
-    exclude:
-      - '^docs:'
-      - '^test:'
+  disable: true
+
+release:
+  header: |
+    See [release notes](https://github.com/JulienTant/blogwatcher-cli/blob/main/docs/release-notes/{{ .Tag }}.md) for details.
 
 snapshot:
   version_template: "main"
