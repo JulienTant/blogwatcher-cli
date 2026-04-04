@@ -219,9 +219,13 @@ func (db *Database) RemoveBlog(ctx context.Context, id int64) (bool, error) {
 // Article operations
 
 func (db *Database) AddArticle(ctx context.Context, article model.Article) (model.Article, error) {
+	cats, err := categoriesToJSON(article.Categories)
+	if err != nil {
+		return article, err
+	}
 	result, err := sq.Insert("articles").
 		Columns("blog_id", "title", "url", "published_date", "discovered_date", "is_read", "categories").
-		Values(article.BlogID, article.Title, article.URL, formatTimePtr(article.PublishedDate), formatTimePtr(article.DiscoveredDate), article.IsRead, categoriesToJSON(article.Categories)).
+		Values(article.BlogID, article.Title, article.URL, formatTimePtr(article.PublishedDate), formatTimePtr(article.DiscoveredDate), article.IsRead, cats).
 		RunWith(db.conn).
 		ExecContext(ctx)
 	if err != nil {
@@ -247,6 +251,13 @@ func (db *Database) AddArticlesBulk(ctx context.Context, articles []model.Articl
 	insert := sq.Insert("articles").
 		Columns("blog_id", "title", "url", "published_date", "discovered_date", "is_read", "categories")
 	for _, article := range articles {
+		cats, err := categoriesToJSON(article.Categories)
+		if err != nil {
+			if rerr := tx.Rollback(); rerr != nil {
+				fmt.Fprintf(os.Stderr, "rollback: %v\n", rerr)
+			}
+			return 0, err
+		}
 		insert = insert.Values(
 			article.BlogID,
 			article.Title,
@@ -254,7 +265,7 @@ func (db *Database) AddArticlesBulk(ctx context.Context, articles []model.Articl
 			formatTimePtr(article.PublishedDate),
 			formatTimePtr(article.DiscoveredDate),
 			article.IsRead,
-			categoriesToJSON(article.Categories),
+			cats,
 		)
 	}
 
@@ -472,13 +483,18 @@ func scanArticle(scanner interface{ Scan(dest ...any) error }) (*model.Article, 
 		return nil, err
 	}
 
+	cats, err := categoriesFromJSON(categories)
+	if err != nil {
+		return nil, err
+	}
+
 	article := &model.Article{
 		ID:         id,
 		BlogID:     blogID,
 		Title:      title,
 		URL:        url,
 		IsRead:     isRead,
-		Categories: categoriesFromJSON(categories),
+		Categories: cats,
 	}
 	if publishedDate.Valid {
 		if parsed, err := parseTime(publishedDate.String); err == nil {
@@ -522,25 +538,25 @@ func nullIfEmpty(value string) *string {
 	return &value
 }
 
-func categoriesToJSON(categories []string) *string {
+func categoriesToJSON(categories []string) (*string, error) {
 	if len(categories) == 0 {
-		return nil
+		return nil, nil
 	}
 	b, err := json.Marshal(categories)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("marshal categories: %w", err)
 	}
 	s := string(b)
-	return &s
+	return &s, nil
 }
 
-func categoriesFromJSON(s sql.NullString) []string {
+func categoriesFromJSON(s sql.NullString) ([]string, error) {
 	if !s.Valid || s.String == "" {
-		return nil
+		return nil, nil
 	}
 	var cats []string
 	if err := json.Unmarshal([]byte(s.String), &cats); err != nil {
-		return nil
+		return nil, fmt.Errorf("unmarshal categories: %w", err)
 	}
-	return cats
+	return cats, nil
 }
