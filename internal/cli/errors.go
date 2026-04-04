@@ -10,6 +10,10 @@ func (e printedError) Error() string {
 	return e.err.Error()
 }
 
+func (e printedError) Unwrap() error {
+	return e.err
+}
+
 func markError(err error) error {
 	if err == nil {
 		return nil
