@@ -19,6 +19,7 @@ type FeedArticle struct {
 	Title         string
 	URL           string
 	PublishedDate *time.Time
+	Categories    []string
 }
 
 type FeedParseError struct {
@@ -29,13 +30,22 @@ func (e FeedParseError) Error() string {
 	return e.Message
 }
 
-func ParseFeed(ctx context.Context, feedURL string, timeout time.Duration) ([]FeedArticle, error) {
-	client := &http.Client{Timeout: timeout}
+// Fetcher fetches and parses RSS/Atom feeds.
+type Fetcher struct {
+	client *http.Client
+}
+
+// NewFetcher creates a Fetcher with the given HTTP client.
+func NewFetcher(client *http.Client) *Fetcher {
+	return &Fetcher{client: client}
+}
+
+func (f *Fetcher) ParseFeed(ctx context.Context, feedURL string) ([]FeedArticle, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, feedURL, nil)
 	if err != nil {
 		return nil, FeedParseError{Message: fmt.Sprintf("failed to create request: %v", err)}
 	}
-	response, err := client.Do(req)
+	response, err := f.client.Do(req)
 	if err != nil {
 		return nil, FeedParseError{Message: fmt.Sprintf("failed to fetch feed: %v", err)}
 	}
@@ -65,19 +75,19 @@ func ParseFeed(ctx context.Context, feedURL string, timeout time.Duration) ([]Fe
 			Title:         title,
 			URL:           link,
 			PublishedDate: pickPublishedDate(item),
+			Categories:    item.Categories,
 		})
 	}
 
 	return articles, nil
 }
 
-func DiscoverFeedURL(ctx context.Context, blogURL string, timeout time.Duration) (string, error) {
-	client := &http.Client{Timeout: timeout}
+func (f *Fetcher) DiscoverFeedURL(ctx context.Context, blogURL string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, blogURL, nil)
 	if err != nil {
 		return "", nil
 	}
-	response, err := client.Do(req)
+	response, err := f.client.Do(req)
 	if err != nil {
 		return "", nil
 	}
@@ -153,7 +163,7 @@ func DiscoverFeedURL(ctx context.Context, blogURL string, timeout time.Duration)
 		if resolved == "" {
 			continue
 		}
-		ok, err := isValidFeed(ctx, resolved, timeout)
+		ok, err := f.isValidFeed(ctx, resolved)
 		if err == nil && ok {
 			return resolved, nil
 		}
@@ -162,13 +172,12 @@ func DiscoverFeedURL(ctx context.Context, blogURL string, timeout time.Duration)
 	return "", nil
 }
 
-func isValidFeed(ctx context.Context, feedURL string, timeout time.Duration) (bool, error) {
-	client := &http.Client{Timeout: timeout}
+func (f *Fetcher) isValidFeed(ctx context.Context, feedURL string) (bool, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, feedURL, nil)
 	if err != nil {
 		return false, err
 	}
-	response, err := client.Do(req)
+	response, err := f.client.Do(req)
 	if err != nil {
 		return false, err
 	}

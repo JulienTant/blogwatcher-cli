@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -218,9 +219,13 @@ func (db *Database) RemoveBlog(ctx context.Context, id int64) (bool, error) {
 // Article operations
 
 func (db *Database) AddArticle(ctx context.Context, article model.Article) (model.Article, error) {
+	cats, err := categoriesToJSON(article.Categories)
+	if err != nil {
+		return article, err
+	}
 	result, err := sq.Insert("articles").
-		Columns("blog_id", "title", "url", "published_date", "discovered_date", "is_read").
-		Values(article.BlogID, article.Title, article.URL, formatTimePtr(article.PublishedDate), formatTimePtr(article.DiscoveredDate), article.IsRead).
+		Columns("blog_id", "title", "url", "published_date", "discovered_date", "is_read", "categories").
+		Values(article.BlogID, article.Title, article.URL, formatTimePtr(article.PublishedDate), formatTimePtr(article.DiscoveredDate), article.IsRead, cats).
 		RunWith(db.conn).
 		ExecContext(ctx)
 	if err != nil {
@@ -244,8 +249,15 @@ func (db *Database) AddArticlesBulk(ctx context.Context, articles []model.Articl
 	}
 
 	insert := sq.Insert("articles").
-		Columns("blog_id", "title", "url", "published_date", "discovered_date", "is_read")
+		Columns("blog_id", "title", "url", "published_date", "discovered_date", "is_read", "categories")
 	for _, article := range articles {
+		cats, err := categoriesToJSON(article.Categories)
+		if err != nil {
+			if rerr := tx.Rollback(); rerr != nil {
+				fmt.Fprintf(os.Stderr, "rollback: %v\n", rerr)
+			}
+			return 0, err
+		}
 		insert = insert.Values(
 			article.BlogID,
 			article.Title,
@@ -253,6 +265,7 @@ func (db *Database) AddArticlesBulk(ctx context.Context, articles []model.Articl
 			formatTimePtr(article.PublishedDate),
 			formatTimePtr(article.DiscoveredDate),
 			article.IsRead,
+			cats,
 		)
 	}
 
@@ -271,7 +284,7 @@ func (db *Database) AddArticlesBulk(ctx context.Context, articles []model.Articl
 }
 
 func (db *Database) GetArticle(ctx context.Context, id int64) (*model.Article, error) {
-	row := sq.Select("id", "blog_id", "title", "url", "published_date", "discovered_date", "is_read").
+	row := sq.Select("id", "blog_id", "title", "url", "published_date", "discovered_date", "is_read", "categories").
 		From("articles").
 		Where(sq.Eq{"id": id}).
 		RunWith(db.conn).
@@ -280,7 +293,7 @@ func (db *Database) GetArticle(ctx context.Context, id int64) (*model.Article, e
 }
 
 func (db *Database) GetArticleByURL(ctx context.Context, url string) (*model.Article, error) {
-	row := sq.Select("id", "blog_id", "title", "url", "published_date", "discovered_date", "is_read").
+	row := sq.Select("id", "blog_id", "title", "url", "published_date", "discovered_date", "is_read", "categories").
 		From("articles").
 		Where(sq.Eq{"url": url}).
 		RunWith(db.conn).
@@ -347,8 +360,8 @@ func (db *Database) GetExistingArticleURLs(ctx context.Context, urls []string) (
 	return result, nil
 }
 
-func (db *Database) ListArticles(ctx context.Context, unreadOnly bool, blogID *int64) ([]model.Article, error) {
-	query := sq.Select("id", "blog_id", "title", "url", "published_date", "discovered_date", "is_read").
+func (db *Database) ListArticles(ctx context.Context, unreadOnly bool, blogID *int64, category *string) ([]model.Article, error) {
+	query := sq.Select("id", "blog_id", "title", "url", "published_date", "discovered_date", "is_read", "categories").
 		From("articles").
 		OrderBy("discovered_date DESC")
 
@@ -357,6 +370,11 @@ func (db *Database) ListArticles(ctx context.Context, unreadOnly bool, blogID *i
 	}
 	if blogID != nil {
 		query = query.Where(sq.Eq{"blog_id": *blogID})
+	}
+	if category != nil && *category != "" {
+		// Categories are stored as a JSON string array. Use json_each()
+		// for exact element matching.
+		query = query.Where("EXISTS (SELECT 1 FROM json_each(categories) WHERE LOWER(json_each.value) = LOWER(?))", *category)
 	}
 
 	rows, err := query.RunWith(db.conn).QueryContext(ctx)
@@ -456,20 +474,27 @@ func scanArticle(scanner interface{ Scan(dest ...any) error }) (*model.Article, 
 		publishedDate sql.NullString
 		discovered    sql.NullString
 		isRead        bool
+		categories    sql.NullString
 	)
-	if err := scanner.Scan(&id, &blogID, &title, &url, &publishedDate, &discovered, &isRead); err != nil {
+	if err := scanner.Scan(&id, &blogID, &title, &url, &publishedDate, &discovered, &isRead, &categories); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
 	}
 
+	cats, err := categoriesFromJSON(categories)
+	if err != nil {
+		return nil, err
+	}
+
 	article := &model.Article{
-		ID:     id,
-		BlogID: blogID,
-		Title:  title,
-		URL:    url,
-		IsRead: isRead,
+		ID:         id,
+		BlogID:     blogID,
+		Title:      title,
+		URL:        url,
+		IsRead:     isRead,
+		Categories: cats,
 	}
 	if publishedDate.Valid {
 		if parsed, err := parseTime(publishedDate.String); err == nil {
@@ -511,4 +536,27 @@ func nullIfEmpty(value string) *string {
 		return nil
 	}
 	return &value
+}
+
+func categoriesToJSON(categories []string) (*string, error) {
+	if len(categories) == 0 {
+		return nil, nil
+	}
+	b, err := json.Marshal(categories)
+	if err != nil {
+		return nil, fmt.Errorf("marshal categories: %w", err)
+	}
+	s := string(b)
+	return &s, nil
+}
+
+func categoriesFromJSON(s sql.NullString) ([]string, error) {
+	if !s.Valid || s.String == "" {
+		return nil, nil
+	}
+	var cats []string
+	if err := json.Unmarshal([]byte(s.String), &cats); err != nil {
+		return nil, fmt.Errorf("unmarshal categories: %w", err)
+	}
+	return cats, nil
 }

@@ -6,6 +6,8 @@ import (
 	"os"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/JulienTant/blogwatcher-cli/internal/model"
 	"github.com/JulienTant/blogwatcher-cli/internal/rss"
 	"github.com/JulienTant/blogwatcher-cli/internal/scraper"
@@ -17,50 +19,68 @@ type ScanResult struct {
 	NewArticles int
 	TotalFound  int
 	Source      string
-	Error       string
 }
 
-func ScanBlog(ctx context.Context, db *storage.Database, blog model.Blog) ScanResult {
+// Scanner orchestrates blog scanning using a Fetcher and Scraper.
+type Scanner struct {
+	fetcher *rss.Fetcher
+	scraper *scraper.Scraper
+}
+
+// NewScanner creates a Scanner with the given fetcher and scraper.
+func NewScanner(fetcher *rss.Fetcher, scraper *scraper.Scraper) *Scanner {
+	return &Scanner{fetcher: fetcher, scraper: scraper}
+}
+
+func (s *Scanner) ScanBlog(ctx context.Context, db *storage.Database, blog model.Blog) (ScanResult, error) {
 	var (
 		articles []model.Article
 		source   = "none"
-		errText  string
 	)
 
 	feedURL := blog.FeedURL
 	if feedURL == "" {
-		if discovered, err := rss.DiscoverFeedURL(ctx, blog.URL, 30*time.Second); err == nil && discovered != "" {
+		discovered, err := s.fetcher.DiscoverFeedURL(ctx, blog.URL)
+		if err != nil {
+			return ScanResult{BlogName: blog.Name}, err
+		}
+		if discovered != "" {
 			feedURL = discovered
-			blog.FeedURL = discovered
-			if err := db.UpdateBlog(ctx, blog); err != nil {
-				fmt.Fprintf(os.Stderr, "update blog: %v\n", err)
-			}
 		}
 	}
 
 	if feedURL != "" {
-		feedArticles, err := rss.ParseFeed(ctx, feedURL, 30*time.Second)
+		feedArticles, err := s.fetcher.ParseFeed(ctx, feedURL)
 		if err != nil {
-			errText = err.Error()
+			// If there's a scraper fallback, try it before giving up.
+			if blog.ScrapeSelector == "" {
+				return ScanResult{BlogName: blog.Name}, err
+			}
+			// Try scraper as fallback.
+			scrapedArticles, scrapeErr := s.scraper.ScrapeBlog(ctx, blog.URL, blog.ScrapeSelector)
+			if scrapeErr != nil {
+				return ScanResult{BlogName: blog.Name}, fmt.Errorf("RSS: %w; Scraper: %w", err, scrapeErr)
+			}
+			articles = convertScrapedArticles(blog.ID, scrapedArticles)
+			source = "scraper"
 		} else {
 			articles = convertFeedArticles(blog.ID, feedArticles)
 			source = "rss"
-		}
-	}
-
-	if len(articles) == 0 && blog.ScrapeSelector != "" {
-		scrapedArticles, err := scraper.ScrapeBlog(ctx, blog.URL, blog.ScrapeSelector, 30*time.Second)
-		if err != nil {
-			if errText != "" {
-				errText = fmt.Sprintf("RSS: %s; Scraper: %s", errText, err.Error())
-			} else {
-				errText = err.Error()
+			// Persist discovered feed URL only after successful parse.
+			if blog.FeedURL != feedURL {
+				blog.FeedURL = feedURL
+				if err := db.UpdateBlog(ctx, blog); err != nil {
+					return ScanResult{BlogName: blog.Name}, err
+				}
 			}
-		} else {
-			articles = convertScrapedArticles(blog.ID, scrapedArticles)
-			source = "scraper"
-			errText = ""
 		}
+	} else if blog.ScrapeSelector != "" {
+		scrapedArticles, err := s.scraper.ScrapeBlog(ctx, blog.URL, blog.ScrapeSelector)
+		if err != nil {
+			return ScanResult{BlogName: blog.Name}, err
+		}
+		articles = convertScrapedArticles(blog.ID, scrapedArticles)
+		source = "scraper"
 	}
 
 	seenURLs := make(map[string]struct{})
@@ -80,7 +100,7 @@ func ScanBlog(ctx context.Context, db *storage.Database, blog model.Blog) ScanRe
 
 	existing, err := db.GetExistingArticleURLs(ctx, urlList)
 	if err != nil {
-		errText = err.Error()
+		return ScanResult{BlogName: blog.Name}, err
 	}
 
 	discoveredAt := time.Now()
@@ -97,14 +117,13 @@ func ScanBlog(ctx context.Context, db *storage.Database, blog model.Blog) ScanRe
 	if len(newArticles) > 0 {
 		count, err := db.AddArticlesBulk(ctx, newArticles)
 		if err != nil {
-			errText = err.Error()
-		} else {
-			newCount = count
+			return ScanResult{BlogName: blog.Name}, err
 		}
+		newCount = count
 	}
 
 	if err := db.UpdateBlogLastScanned(ctx, blog.ID, time.Now()); err != nil {
-		fmt.Fprintf(os.Stderr, "update last scanned: %v\n", err)
+		return ScanResult{BlogName: blog.Name}, err
 	}
 
 	return ScanResult{
@@ -112,11 +131,10 @@ func ScanBlog(ctx context.Context, db *storage.Database, blog model.Blog) ScanRe
 		NewArticles: newCount,
 		TotalFound:  len(seenURLs),
 		Source:      source,
-		Error:       errText,
-	}
+	}, nil
 }
 
-func ScanAllBlogs(ctx context.Context, db *storage.Database, workers int) ([]ScanResult, error) {
+func (s *Scanner) ScanAllBlogs(ctx context.Context, db *storage.Database, workers int) ([]ScanResult, error) {
 	blogs, err := db.ListBlogs(ctx)
 	if err != nil {
 		return nil, err
@@ -124,7 +142,11 @@ func ScanAllBlogs(ctx context.Context, db *storage.Database, workers int) ([]Sca
 	if workers <= 1 {
 		results := make([]ScanResult, 0, len(blogs))
 		for _, blog := range blogs {
-			results = append(results, ScanBlog(ctx, db, blog))
+			result, err := s.ScanBlog(ctx, db, blog)
+			if err != nil {
+				return nil, fmt.Errorf("scan %s: %w", blog.Name, err)
+			}
+			results = append(results, result)
 		}
 		return results, nil
 	}
@@ -135,14 +157,14 @@ func ScanAllBlogs(ctx context.Context, db *storage.Database, workers int) ([]Sca
 	}
 	jobs := make(chan job)
 	results := make([]ScanResult, len(blogs))
-	errs := make(chan error, workers)
+
+	g, gctx := errgroup.WithContext(ctx)
 
 	for i := 0; i < workers; i++ {
-		go func() {
-			workerDB, err := storage.OpenDatabase(ctx, db.Path())
+		g.Go(func() error {
+			workerDB, err := storage.OpenDatabase(gctx, db.Path())
 			if err != nil {
-				errs <- err
-				return
+				return err
 			}
 			defer func() {
 				if err := workerDB.Close(); err != nil {
@@ -150,27 +172,36 @@ func ScanAllBlogs(ctx context.Context, db *storage.Database, workers int) ([]Sca
 				}
 			}()
 			for item := range jobs {
-				results[item.Index] = ScanBlog(ctx, workerDB, item.Blog)
+				result, err := s.ScanBlog(gctx, workerDB, item.Blog)
+				if err != nil {
+					return fmt.Errorf("scan %s: %w", item.Blog.Name, err)
+				}
+				results[item.Index] = result
 			}
-			errs <- nil
-		}()
+			return nil
+		})
 	}
 
-	for index, blog := range blogs {
-		jobs <- job{Index: index, Blog: blog}
-	}
-	close(jobs)
-
-	for i := 0; i < workers; i++ {
-		if err := <-errs; err != nil {
-			return nil, err
+	g.Go(func() error {
+		defer close(jobs)
+		for index, blog := range blogs {
+			select {
+			case jobs <- job{Index: index, Blog: blog}:
+			case <-gctx.Done():
+				return gctx.Err()
+			}
 		}
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
 
 	return results, nil
 }
 
-func ScanBlogByName(ctx context.Context, db *storage.Database, name string) (*ScanResult, error) {
+func (s *Scanner) ScanBlogByName(ctx context.Context, db *storage.Database, name string) (*ScanResult, error) {
 	blog, err := db.GetBlogByName(ctx, name)
 	if err != nil {
 		return nil, err
@@ -178,7 +209,10 @@ func ScanBlogByName(ctx context.Context, db *storage.Database, name string) (*Sc
 	if blog == nil {
 		return nil, nil
 	}
-	result := ScanBlog(ctx, db, *blog)
+	result, err := s.ScanBlog(ctx, db, *blog)
+	if err != nil {
+		return nil, err
+	}
 	return &result, nil
 }
 
@@ -191,6 +225,7 @@ func convertFeedArticles(blogID int64, articles []rss.FeedArticle) []model.Artic
 			URL:           article.URL,
 			PublishedDate: article.PublishedDate,
 			IsRead:        false,
+			Categories:    article.Categories,
 		})
 	}
 	return result

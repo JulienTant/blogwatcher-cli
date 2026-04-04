@@ -57,11 +57,11 @@ func (c *cliOpts) run(t *testing.T, args []string, opts map[string]string) (stdo
 	var cmdArgs []string
 	var extraEnv []string
 
-	// DB path goes before the subcommand (persistent flag).
+	// Persistent flags / env vars.
 	if c.mode == "flags" {
-		cmdArgs = append(cmdArgs, "--db", c.dbPath)
+		cmdArgs = append(cmdArgs, "--db", c.dbPath, "--unsafe-client")
 	} else {
-		extraEnv = append(extraEnv, "BLOGWATCHER_DB="+c.dbPath)
+		extraEnv = append(extraEnv, "BLOGWATCHER_DB="+c.dbPath, "BLOGWATCHER_UNSAFE_CLIENT=true")
 	}
 
 	// Positional args first (includes the subcommand name).
@@ -355,6 +355,10 @@ func TestE2E(t *testing.T) {
 			out = c.ok(t, []string{"articles"}, map[string]string{"blog": "go-blog"})
 			checkOutput(t, "12_articles_filter_blog", out, baseURL)
 
+			// ── Articles filtered by category ──
+			out = c.ok(t, []string{"articles"}, map[string]string{"category": "Engineering"})
+			checkOutput(t, "12b_articles_filter_category", out, baseURL)
+
 			// ── Read / unread cycle ──
 			articlesOut := c.ok(t, []string{"articles"}, nil)
 			id := extractFirstID(t, articlesOut)
@@ -400,6 +404,28 @@ func TestE2E(t *testing.T) {
 			checkOutput(t, "23_remove_nonexistent", stderr, baseURL)
 		})
 	}
+}
+
+func TestSSRFProtection(t *testing.T) {
+	baseURL := startTestServer(t)
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+
+	// Add a blog pointing to the loopback test server WITHOUT --unsafe-client.
+	// The add command doesn't fetch, so it should succeed.
+	cmd := exec.CommandContext(context.Background(), binaryPath,
+		"--db", dbPath, "add", "test-blog", baseURL+"/go/",
+		"--feed-url", baseURL+"/go/feed.atom")
+	cmd.Env = append(os.Environ(), "NO_COLOR=1")
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "add should succeed: %s", string(out))
+
+	// Scan WITHOUT --unsafe-client — the safe client should block loopback and fail.
+	cmd = exec.CommandContext(context.Background(), binaryPath,
+		"--db", dbPath, "scan")
+	cmd.Env = append(os.Environ(), "NO_COLOR=1")
+	out, err = cmd.CombinedOutput()
+	require.Error(t, err, "scan should fail when SSRF protection blocks loopback")
+	require.Contains(t, string(out), "is not authorized", "expected SSRF error message")
 }
 
 func extractFirstID(t *testing.T, output string) string {

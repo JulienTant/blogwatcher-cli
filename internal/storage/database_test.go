@@ -39,7 +39,7 @@ func TestDatabaseCreatesFileAndCRUD(t *testing.T) {
 	require.NoError(t, err, "add articles bulk")
 	require.Equal(t, 2, count)
 
-	list, err := db.ListArticles(ctx, false, nil)
+	list, err := db.ListArticles(ctx, false, nil, nil)
 	require.NoError(t, err, "list articles")
 	require.Len(t, list, 2)
 
@@ -190,17 +190,17 @@ func TestListArticlesFiltersAndOrdering(t *testing.T) {
 	_, err = db.MarkArticleRead(ctx, first.ID)
 	require.NoError(t, err, "mark read")
 
-	all, err := db.ListArticles(ctx, false, nil)
+	all, err := db.ListArticles(ctx, false, nil, nil)
 	require.NoError(t, err, "list articles")
 	require.Len(t, all, 3)
 	require.Equal(t, second.ID, all[0].ID, "expected newest article first")
 
-	unread, err := db.ListArticles(ctx, true, nil)
+	unread, err := db.ListArticles(ctx, true, nil, nil)
 	require.NoError(t, err, "list unread")
 	require.Len(t, unread, 2)
 
 	blogID := blogB.ID
-	filtered, err := db.ListArticles(ctx, false, &blogID)
+	filtered, err := db.ListArticles(ctx, false, &blogID, nil)
 	require.NoError(t, err, "list by blog")
 	require.Len(t, filtered, 1)
 	require.Equal(t, blogB.ID, filtered[0].BlogID)
@@ -231,7 +231,7 @@ func TestBulkInsertDuplicateRollbackAndEmpty(t *testing.T) {
 	_, err = db.AddArticlesBulk(ctx, dupArticles)
 	require.Error(t, err, "expected bulk insert to fail on duplicate url")
 
-	articles, err := db.ListArticles(ctx, false, nil)
+	articles, err := db.ListArticles(ctx, false, nil, nil)
 	require.NoError(t, err, "list articles")
 	require.Len(t, articles, 1, "expected rollback on duplicate")
 }
@@ -268,4 +268,157 @@ func TestLookupHelpers(t *testing.T) {
 	exists, err = db.ArticleExists(ctx, "https://example.com/missing")
 	require.NoError(t, err)
 	require.False(t, exists)
+}
+
+func TestArticleCategoriesRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	db := openTestDB(t)
+	defer func() { require.NoError(t, db.Close()) }()
+
+	blog, err := db.AddBlog(ctx, model.Blog{Name: "Test", URL: "https://example.com"})
+	require.NoError(t, err, "add blog")
+
+	// Article with categories
+	article, err := db.AddArticle(ctx, model.Article{
+		BlogID:     blog.ID,
+		Title:      "Categorized",
+		URL:        "https://example.com/cat",
+		Categories: []string{"Go", "Programming"},
+	})
+	require.NoError(t, err, "add article with categories")
+
+	fetched, err := db.GetArticle(ctx, article.ID)
+	require.NoError(t, err, "get article")
+	require.NotNil(t, fetched)
+	require.Equal(t, []string{"Go", "Programming"}, fetched.Categories)
+
+	// Article without categories
+	articleNoCat, err := db.AddArticle(ctx, model.Article{
+		BlogID: blog.ID,
+		Title:  "No Category",
+		URL:    "https://example.com/nocat",
+	})
+	require.NoError(t, err, "add article without categories")
+
+	fetchedNoCat, err := db.GetArticle(ctx, articleNoCat.ID)
+	require.NoError(t, err, "get article")
+	require.NotNil(t, fetchedNoCat)
+	require.Nil(t, fetchedNoCat.Categories)
+}
+
+func TestListArticlesFilterByCategory(t *testing.T) {
+	ctx := context.Background()
+	db := openTestDB(t)
+	defer func() { require.NoError(t, db.Close()) }()
+
+	blog, err := db.AddBlog(ctx, model.Blog{Name: "Test", URL: "https://example.com"})
+	require.NoError(t, err, "add blog")
+
+	t1 := time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC)
+	t2 := time.Date(2024, 1, 1, 11, 0, 0, 0, time.UTC)
+	t3 := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	_, err = db.AddArticle(ctx, model.Article{
+		BlogID:         blog.ID,
+		Title:          "Go Article",
+		URL:            "https://example.com/go",
+		DiscoveredDate: &t1,
+		Categories:     []string{"Go", "Programming"},
+	})
+	require.NoError(t, err, "add go article")
+
+	_, err = db.AddArticle(ctx, model.Article{
+		BlogID:         blog.ID,
+		Title:          "Rust Article",
+		URL:            "https://example.com/rust",
+		DiscoveredDate: &t2,
+		Categories:     []string{"Rust", "Programming"},
+	})
+	require.NoError(t, err, "add rust article")
+
+	_, err = db.AddArticle(ctx, model.Article{
+		BlogID:         blog.ID,
+		Title:          "No Category",
+		URL:            "https://example.com/nocat",
+		DiscoveredDate: &t3,
+	})
+	require.NoError(t, err, "add no-cat article")
+
+	// Filter by "Go" - should return only the Go article
+	cat := "Go"
+	goArticles, err := db.ListArticles(ctx, false, nil, &cat)
+	require.NoError(t, err, "list by category Go")
+	require.Len(t, goArticles, 1)
+	require.Equal(t, "Go Article", goArticles[0].Title)
+
+	// Filter by "Programming" - should return both categorized articles
+	cat = "Programming"
+	progArticles, err := db.ListArticles(ctx, false, nil, &cat)
+	require.NoError(t, err, "list by category Programming")
+	require.Len(t, progArticles, 2)
+
+	// No filter - should return all 3
+	all, err := db.ListArticles(ctx, false, nil, nil)
+	require.NoError(t, err, "list all")
+	require.Len(t, all, 3)
+
+	// Case-insensitive match - "go" should match "Go"
+	cat = "go"
+	goLower, err := db.ListArticles(ctx, false, nil, &cat)
+	require.NoError(t, err, "list by category go (lowercase)")
+	require.Len(t, goLower, 1)
+	require.Equal(t, "Go Article", goLower[0].Title)
+
+	// Case-insensitive match - "PROGRAMMING" should match "Programming"
+	cat = "PROGRAMMING"
+	progUpper, err := db.ListArticles(ctx, false, nil, &cat)
+	require.NoError(t, err, "list by category PROGRAMMING (uppercase)")
+	require.Len(t, progUpper, 2)
+
+	// Empty string category should return all
+	empty := ""
+	allEmpty, err := db.ListArticles(ctx, false, nil, &empty)
+	require.NoError(t, err, "list with empty category")
+	require.Len(t, allEmpty, 3)
+}
+
+func TestBulkInsertWithCategories(t *testing.T) {
+	ctx := context.Background()
+	db := openTestDB(t)
+	defer func() { require.NoError(t, db.Close()) }()
+
+	blog, err := db.AddBlog(ctx, model.Blog{Name: "Test", URL: "https://example.com"})
+	require.NoError(t, err, "add blog")
+
+	articles := []model.Article{
+		{BlogID: blog.ID, Title: "One", URL: "https://example.com/1", Categories: []string{"AI", "ML"}},
+		{BlogID: blog.ID, Title: "Two", URL: "https://example.com/2"},
+	}
+	count, err := db.AddArticlesBulk(ctx, articles)
+	require.NoError(t, err, "bulk insert")
+	require.Equal(t, 2, count)
+
+	list, err := db.ListArticles(ctx, false, nil, nil)
+	require.NoError(t, err, "list articles")
+	require.Len(t, list, 2)
+
+	// Find the one with categories (order is by discovered_date DESC, both nil so order may vary)
+	var withCat *model.Article
+	for i := range list {
+		if list[i].Title == "One" {
+			withCat = &list[i]
+			break
+		}
+	}
+	require.NotNil(t, withCat, "expected article with categories")
+	require.Equal(t, []string{"AI", "ML"}, withCat.Categories)
+}
+
+func openTestDB(t *testing.T) *Database {
+	t.Helper()
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "blogwatcher-cli.db")
+	db, err := OpenDatabase(ctx, path)
+	require.NoError(t, err, "open database")
+	return db
 }
