@@ -237,7 +237,7 @@ func newArticlesCommand() *cobra.Command {
 					fmt.Fprintf(os.Stderr, "close db: %v\n", err)
 				}
 			}()
-			articles, blogNames, err := controller.GetArticles(cmd.Context(), db, showAll, viper.GetString("blog"))
+			articles, blogNames, err := controller.GetArticles(cmd.Context(), db, showAll, viper.GetString("blog"), viper.GetString("category"))
 			if err != nil {
 				printError(err)
 				return markError(err)
@@ -265,6 +265,7 @@ func newArticlesCommand() *cobra.Command {
 
 	cmd.Flags().BoolP("all", "a", false, "Show all articles (including read)")
 	cmd.Flags().StringP("blog", "b", "", "Filter by blog name")
+	cmd.Flags().StringP("category", "c", "", "Filter by category")
 	return cmd
 }
 
@@ -320,7 +321,7 @@ func newReadAllCommand() *cobra.Command {
 				}
 			}()
 
-			articles, _, err := controller.GetArticles(cmd.Context(), db, false, blogName)
+			articles, _, err := controller.GetArticles(cmd.Context(), db, false, blogName, "")
 			if err != nil {
 				printError(err)
 				return markError(err)
@@ -424,6 +425,9 @@ func printArticle(article model.Article, blogName string) {
 	fmt.Printf("       URL: %s\n", article.URL)
 	if article.PublishedDate != nil {
 		fmt.Printf("       Published: %s\n", article.PublishedDate.Format("2006-01-02"))
+	}
+	if len(article.Categories) > 0 {
+		fmt.Printf("       Categories: %s\n", strings.Join(article.Categories, ", "))
 	}
 	fmt.Println()
 }

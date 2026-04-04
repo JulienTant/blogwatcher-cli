@@ -15,6 +15,8 @@
     <link>https://github.blog/engineering/the-uphill-climb-of-making-diff-lines-performant/</link>
     <dc:creator><![CDATA[Luke Ghenco]]></dc:creator>
     <pubDate>Fri, 03 Apr 2026 16:00:00 +0000</pubDate>
+    <category>Engineering</category>
+    <category>Performance</category>
     <description><![CDATA[The path to better performance is often found in simplicity.]]></description>
   </item>
   <item>
@@ -22,6 +24,8 @@
     <link>https://github.blog/news-insights/github-copilot-the-agent-awakens/</link>
     <dc:creator><![CDATA[Thomas Dohmke]]></dc:creator>
     <pubDate>Wed, 01 Apr 2026 12:00:00 +0000</pubDate>
+    <category>AI</category>
+    <category>Copilot</category>
     <description><![CDATA[GitHub Copilot is evolving from code completion to full agent.]]></description>
   </item>
   <item>
@@ -29,6 +33,7 @@
     <link>https://github.blog/engineering/how-we-built-the-new-github-issues/</link>
     <dc:creator><![CDATA[Zach Posten]]></dc:creator>
     <pubDate>Mon, 28 Mar 2026 10:00:00 +0000</pubDate>
+    <category>Engineering</category>
     <description><![CDATA[A deep dive into the new GitHub Issues experience.]]></description>
   </item>
 </channel>

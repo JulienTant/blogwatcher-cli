@@ -45,6 +45,40 @@ func TestParseFeed(t *testing.T) {
 	require.NotNil(t, articles[0].PublishedDate)
 }
 
+func TestParseFeedWithCategories(t *testing.T) {
+	feedWithCategories := `<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0">
+<channel>
+<title>Example Feed</title>
+<item>
+<title>Tagged Post</title>
+<link>https://example.com/tagged</link>
+<category>AI</category>
+<category>Machine Learning</category>
+</item>
+<item>
+<title>Plain Post</title>
+<link>https://example.com/plain</link>
+</item>
+</channel>
+</rss>`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, writeErr := w.Write([]byte(feedWithCategories)); writeErr != nil {
+			http.Error(w, writeErr.Error(), http.StatusInternalServerError)
+			return
+		}
+	}))
+	defer server.Close()
+
+	articles, err := newTestFetcher().ParseFeed(context.Background(), server.URL)
+	require.NoError(t, err, "parse feed")
+	require.Len(t, articles, 2)
+
+	require.Equal(t, []string{"AI", "Machine Learning"}, articles[0].Categories)
+	require.Nil(t, articles[1].Categories)
+}
+
 func TestDiscoverFeedURL(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -80,7 +114,7 @@ func TestDiscoverFeedURL_XMLContentType(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	feedURL, err := DiscoverFeedURL(context.Background(), server.URL+"/tag/AI/feed/", 2*time.Second)
+	feedURL, err := newTestFetcher().DiscoverFeedURL(context.Background(), server.URL+"/tag/AI/feed/")
 	require.NoError(t, err)
 	require.Equal(t, server.URL+"/tag/AI/feed/", feedURL, "should return URL directly for feed content-type")
 }
@@ -104,7 +138,7 @@ func TestDiscoverFeedURL_RelSelf(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	feedURL, err := DiscoverFeedURL(context.Background(), server.URL, 2*time.Second)
+	feedURL, err := newTestFetcher().DiscoverFeedURL(context.Background(), server.URL)
 	require.NoError(t, err)
 	require.Equal(t, server.URL+"/my-feed.xml", feedURL, "should discover feed from rel=self link")
 }

@@ -355,6 +355,10 @@ func TestE2E(t *testing.T) {
 			out = c.ok(t, []string{"articles"}, map[string]string{"blog": "go-blog"})
 			checkOutput(t, "12_articles_filter_blog", out, baseURL)
 
+			// ── Articles filtered by category ──
+			out = c.ok(t, []string{"articles"}, map[string]string{"category": "Engineering"})
+			checkOutput(t, "12b_articles_filter_category", out, baseURL)
+
 			// ── Read / unread cycle ──
 			articlesOut := c.ok(t, []string{"articles"}, nil)
 			id := extractFirstID(t, articlesOut)

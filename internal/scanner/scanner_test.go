@@ -57,7 +57,7 @@ func TestScanBlogRSS(t *testing.T) {
 	require.Equal(t, 2, result.NewArticles)
 	require.Equal(t, "rss", result.Source)
 
-	articles, err := db.ListArticles(ctx, false, nil)
+	articles, err := db.ListArticles(ctx, false, nil, nil)
 	require.NoError(t, err, "list articles")
 	require.Len(t, articles, 2)
 }
@@ -164,6 +164,64 @@ func TestScanBlogRespectsExistingArticles(t *testing.T) {
 	result, scanErr := newTestScanner().ScanBlog(ctx, db, blog)
 	require.NoError(t, scanErr)
 	require.Equal(t, 1, result.NewArticles)
+}
+
+func TestScanBlogRSSWithCategories(t *testing.T) {
+	ctx := context.Background()
+	feedWithCategories := `<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0">
+<channel>
+<title>Example Feed</title>
+<item>
+<title>First</title>
+<link>https://example.com/1</link>
+<category>Go</category>
+<category>Programming</category>
+</item>
+<item>
+<title>Second</title>
+<link>https://example.com/2</link>
+</item>
+</channel>
+</rss>`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, writeErr := w.Write([]byte(feedWithCategories)); writeErr != nil {
+			http.Error(w, writeErr.Error(), http.StatusInternalServerError)
+			return
+		}
+	}))
+	defer server.Close()
+
+	db := openTestDB(t)
+	defer func() { require.NoError(t, db.Close()) }()
+
+	blog, err := db.AddBlog(ctx, model.Blog{Name: "Test", URL: "https://example.com", FeedURL: server.URL})
+	require.NoError(t, err, "add blog")
+
+	result, scanErr := newTestScanner().ScanBlog(ctx, db, blog)
+	require.NoError(t, scanErr)
+	require.Equal(t, 2, result.NewArticles)
+
+	articles, err := db.ListArticles(ctx, false, nil, nil)
+	require.NoError(t, err, "list articles")
+	require.Len(t, articles, 2)
+
+	// Find the article with categories
+	var withCat *model.Article
+	var withoutCat *model.Article
+	for i := range articles {
+		if articles[i].Title == "First" {
+			withCat = &articles[i]
+		} else {
+			withoutCat = &articles[i]
+		}
+	}
+	require.NotNil(t, withCat)
+	require.Equal(t, []string{"Go", "Programming"}, withCat.Categories)
+
+	require.NotNil(t, withoutCat)
+	require.Nil(t, withoutCat.Categories)
 }
 
 func ptrTime(value time.Time) *time.Time {

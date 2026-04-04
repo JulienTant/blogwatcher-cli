@@ -46,10 +46,6 @@ func (s *Scanner) ScanBlog(ctx context.Context, db *storage.Database, blog model
 		}
 		if discovered != "" {
 			feedURL = discovered
-			blog.FeedURL = discovered
-			if err := db.UpdateBlog(ctx, blog); err != nil {
-				return ScanResult{BlogName: blog.Name}, err
-			}
 		}
 	}
 
@@ -70,6 +66,13 @@ func (s *Scanner) ScanBlog(ctx context.Context, db *storage.Database, blog model
 		} else {
 			articles = convertFeedArticles(blog.ID, feedArticles)
 			source = "rss"
+			// Persist discovered feed URL only after successful parse.
+			if blog.FeedURL != feedURL {
+				blog.FeedURL = feedURL
+				if err := db.UpdateBlog(ctx, blog); err != nil {
+					return ScanResult{BlogName: blog.Name}, err
+				}
+			}
 		}
 	} else if blog.ScrapeSelector != "" {
 		scrapedArticles, err := s.scraper.ScrapeBlog(ctx, blog.URL, blog.ScrapeSelector)
@@ -222,6 +225,7 @@ func convertFeedArticles(blogID int64, articles []rss.FeedArticle) []model.Artic
 			URL:           article.URL,
 			PublishedDate: article.PublishedDate,
 			IsRead:        false,
+			Categories:    article.Categories,
 		})
 	}
 	return result
