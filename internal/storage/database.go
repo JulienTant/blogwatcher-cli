@@ -3,11 +3,11 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
@@ -221,7 +221,7 @@ func (db *Database) RemoveBlog(ctx context.Context, id int64) (bool, error) {
 func (db *Database) AddArticle(ctx context.Context, article model.Article) (model.Article, error) {
 	result, err := sq.Insert("articles").
 		Columns("blog_id", "title", "url", "published_date", "discovered_date", "is_read", "categories").
-		Values(article.BlogID, article.Title, article.URL, formatTimePtr(article.PublishedDate), formatTimePtr(article.DiscoveredDate), article.IsRead, categoriesToString(article.Categories)).
+		Values(article.BlogID, article.Title, article.URL, formatTimePtr(article.PublishedDate), formatTimePtr(article.DiscoveredDate), article.IsRead, categoriesToJSON(article.Categories)).
 		RunWith(db.conn).
 		ExecContext(ctx)
 	if err != nil {
@@ -254,7 +254,7 @@ func (db *Database) AddArticlesBulk(ctx context.Context, articles []model.Articl
 			formatTimePtr(article.PublishedDate),
 			formatTimePtr(article.DiscoveredDate),
 			article.IsRead,
-			categoriesToString(article.Categories),
+			categoriesToJSON(article.Categories),
 		)
 	}
 
@@ -361,14 +361,9 @@ func (db *Database) ListArticles(ctx context.Context, unreadOnly bool, blogID *i
 		query = query.Where(sq.Eq{"blog_id": *blogID})
 	}
 	if category != nil && *category != "" {
-		// Categories are stored as comma-separated values. Use delimited
-		// matching to avoid partial matches (e.g. "AI" matching "FAIR").
-		query = query.Where(sq.Or{
-			sq.Eq{"categories": *category},                 // exact single category
-			sq.Like{"categories": *category + ",%"},        // starts with
-			sq.Like{"categories": "%," + *category},        // ends with
-			sq.Like{"categories": "%," + *category + ",%"}, // middle
-		})
+		// Categories are stored as a JSON string array. Use json_each()
+		// for exact element matching.
+		query = query.Where("EXISTS (SELECT 1 FROM json_each(categories) WHERE json_each.value = ?)", *category)
 	}
 
 	rows, err := query.RunWith(db.conn).QueryContext(ctx)
@@ -483,7 +478,7 @@ func scanArticle(scanner interface{ Scan(dest ...any) error }) (*model.Article, 
 		Title:      title,
 		URL:        url,
 		IsRead:     isRead,
-		Categories: categoriesFromString(categories),
+		Categories: categoriesFromJSON(categories),
 	}
 	if publishedDate.Valid {
 		if parsed, err := parseTime(publishedDate.String); err == nil {
@@ -527,17 +522,25 @@ func nullIfEmpty(value string) *string {
 	return &value
 }
 
-func categoriesToString(categories []string) *string {
+func categoriesToJSON(categories []string) *string {
 	if len(categories) == 0 {
 		return nil
 	}
-	s := strings.Join(categories, ",")
+	b, err := json.Marshal(categories)
+	if err != nil {
+		return nil
+	}
+	s := string(b)
 	return &s
 }
 
-func categoriesFromString(s sql.NullString) []string {
+func categoriesFromJSON(s sql.NullString) []string {
 	if !s.Valid || s.String == "" {
 		return nil
 	}
-	return strings.Split(s.String, ",")
+	var cats []string
+	if err := json.Unmarshal([]byte(s.String), &cats); err != nil {
+		return nil
+	}
+	return cats
 }
