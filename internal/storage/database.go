@@ -363,7 +363,7 @@ func (db *Database) ListArticles(ctx context.Context, unreadOnly bool, blogID *i
 	if category != nil && *category != "" {
 		// Categories are stored as a JSON string array. Use json_each()
 		// for exact element matching.
-		query = query.Where("EXISTS (SELECT 1 FROM json_each(categories) WHERE json_each.value = ?)", *category)
+		query = query.Where("EXISTS (SELECT 1 FROM json_each(categories) WHERE LOWER(json_each.value) = LOWER(?))", *category)
 	}
 
 	rows, err := query.RunWith(db.conn).QueryContext(ctx)

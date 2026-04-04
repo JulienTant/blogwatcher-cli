@@ -362,6 +362,19 @@ func TestListArticlesFilterByCategory(t *testing.T) {
 	require.NoError(t, err, "list all")
 	require.Len(t, all, 3)
 
+	// Case-insensitive match - "go" should match "Go"
+	cat = "go"
+	goLower, err := db.ListArticles(ctx, false, nil, &cat)
+	require.NoError(t, err, "list by category go (lowercase)")
+	require.Len(t, goLower, 1)
+	require.Equal(t, "Go Article", goLower[0].Title)
+
+	// Case-insensitive match - "PROGRAMMING" should match "Programming"
+	cat = "PROGRAMMING"
+	progUpper, err := db.ListArticles(ctx, false, nil, &cat)
+	require.NoError(t, err, "list by category PROGRAMMING (uppercase)")
+	require.Len(t, progUpper, 2)
+
 	// Empty string category should return all
 	empty := ""
 	allEmpty, err := db.ListArticles(ctx, false, nil, &empty)
