@@ -194,17 +194,26 @@ func newScanCommand() *cobra.Command {
 					return err
 				}
 				totalNew := 0
+				failed := 0
 				for _, result := range results {
 					if !silent {
 						printScanResult(result)
 					}
-					totalNew += result.NewArticles
+					if result.Error != "" {
+						failed++
+					} else {
+						totalNew += result.NewArticles
+					}
 				}
 				if !silent {
 					fmt.Println()
+					succeeded := len(results) - failed
+					if failed > 0 {
+						cprintf([]color.Attribute{color.FgYellow}, "Scanned %d blog(s): %d succeeded, %d failed\n", len(results), succeeded, failed)
+					}
 					if totalNew > 0 {
 						cprintf([]color.Attribute{color.FgGreen, color.Bold}, "Found %d new article(s) total!\n", totalNew)
-					} else {
+					} else if failed == 0 {
 						cprintln([]color.Attribute{color.FgYellow}, "No new articles found.")
 					}
 				}
@@ -433,14 +442,18 @@ func newImportCommand() *cobra.Command {
 }
 
 func printScanResult(result scanner.ScanResult) {
-	statusColor := []color.Attribute{color.FgWhite}
-	if result.NewArticles > 0 {
-		statusColor = []color.Attribute{color.FgGreen}
-	}
 	cprintf([]color.Attribute{color.FgWhite, color.Bold}, "  %s\n", result.BlogName)
+	if result.Error != "" {
+		cprintf([]color.Attribute{color.FgRed}, "    Error: %s\n", result.Error)
+		return
+	}
 	if result.Source == "none" {
 		cprintln([]color.Attribute{color.FgYellow}, "    No feed or scraper configured")
 		return
+	}
+	statusColor := []color.Attribute{color.FgWhite}
+	if result.NewArticles > 0 {
+		statusColor = []color.Attribute{color.FgGreen}
 	}
 	sourceLabel := "HTML"
 	if result.Source == "rss" {

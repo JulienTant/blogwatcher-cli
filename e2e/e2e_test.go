@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -467,13 +468,14 @@ func TestSSRFProtection(t *testing.T) {
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "add should succeed: %s", string(out))
 
-	// Scan WITHOUT --unsafe-client — the safe client should block loopback and fail.
+	// Scan WITHOUT --unsafe-client — the safe client should block loopback.
+	// The scan command exits 0 (partial success) but reports the per-blog error.
 	cmd = exec.CommandContext(context.Background(), binaryPath,
 		"--db", dbPath, "scan")
 	cmd.Env = cleanEnv
 	out, err = cmd.CombinedOutput()
-	require.Error(t, err, "scan should fail when SSRF protection blocks loopback")
-	require.Contains(t, string(out), "failed to fetch feed:", "expected our wrapped error message")
+	require.NoError(t, err, "scan should exit 0 even when blogs fail: %s", string(out))
+	require.Contains(t, string(out), "failed to fetch feed:", "expected per-blog error message in output")
 }
 
 func filterEnv(env []string, key string) []string {
@@ -485,6 +487,46 @@ func filterEnv(env []string, key string) []string {
 		}
 	}
 	return filtered
+}
+
+func TestScanPartialFailure(t *testing.T) {
+	baseURL := startTestServer(t)
+
+	// Start a server that always returns 500.
+	badServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer badServer.Close()
+
+	for _, mode := range []string{"flags", "env"} {
+		t.Run(mode, func(t *testing.T) {
+			c := &cliOpts{
+				mode:   mode,
+				dbPath: filepath.Join(t.TempDir(), "test.db"),
+			}
+
+			// Add a working blog.
+			c.ok(t, []string{"add", "good-blog", baseURL + "/go/"}, map[string]string{
+				"feed-url": baseURL + "/go/feed.atom",
+			})
+
+			// Add a blog pointing to the always-failing server.
+			c.ok(t, []string{"add", "bad-blog", badServer.URL}, map[string]string{
+				"feed-url": badServer.URL + "/feed",
+			})
+
+			// Scan should exit 0 (partial success).
+			stdout := c.ok(t, []string{"scan"}, nil)
+
+			// Verify the output contains success for the good blog and error for the bad blog.
+			assert.Contains(t, stdout, "good-blog")
+			assert.Contains(t, stdout, "Source: RSS")
+			assert.Contains(t, stdout, "bad-blog")
+			assert.Contains(t, stdout, "Error: failed to fetch feed: status 500")
+			assert.Contains(t, stdout, "2 blog(s): 1 succeeded, 1 failed")
+			assert.Contains(t, stdout, "Found 3 new article(s) total!")
+		})
+	}
 }
 
 func extractFirstID(t *testing.T, output string) string {
