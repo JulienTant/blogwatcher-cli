@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/JulienTant/blogwatcher-cli/internal/model"
 	"github.com/JulienTant/blogwatcher-cli/internal/opml"
@@ -158,7 +159,11 @@ func ImportOPML(ctx context.Context, db *storage.Database, r io.Reader) (added i
 		if siteURL == "" {
 			siteURL = feed.FeedURL
 		}
-		_, err := AddBlog(ctx, db, feed.Title, siteURL, feed.FeedURL, "")
+		title := strings.TrimSpace(feed.Title)
+		if title == "" {
+			title = siteURL
+		}
+		_, err := AddBlog(ctx, db, title, siteURL, feed.FeedURL, "")
 		if err != nil {
 			var alreadyExists BlogAlreadyExistsError
 			if errors.As(err, &alreadyExists) {

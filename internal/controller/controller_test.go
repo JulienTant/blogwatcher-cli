@@ -153,6 +153,36 @@ func TestImportOPMLInvalidXML(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestImportOPMLEmptyTitleFallback(t *testing.T) {
+	ctx := context.Background()
+	db := openTestDB(t)
+	defer func() { require.NoError(t, db.Close()) }()
+
+	opmlData := `<?xml version="1.0" encoding="UTF-8"?>
+<opml version="1.0">
+    <head><title>Test</title></head>
+    <body>
+        <outline type="rss" text="" title="" xmlUrl="http://a.com/feed" htmlUrl="http://a.com"/>
+        <outline type="rss" text="" title="" xmlUrl="http://b.com/feed" htmlUrl="http://b.com"/>
+    </body>
+</opml>`
+
+	added, skipped, err := ImportOPML(ctx, db, strings.NewReader(opmlData))
+	require.NoError(t, err)
+	assert.Equal(t, 2, added, "both feeds should be added with fallback names")
+	assert.Equal(t, 0, skipped)
+
+	blogA, err := db.GetBlogByURL(ctx, "http://a.com")
+	require.NoError(t, err)
+	require.NotNil(t, blogA)
+	assert.Equal(t, "http://a.com", blogA.Name, "name should fall back to site URL")
+
+	blogB, err := db.GetBlogByURL(ctx, "http://b.com")
+	require.NoError(t, err)
+	require.NotNil(t, blogB)
+	assert.Equal(t, "http://b.com", blogB.Name, "name should fall back to site URL")
+}
+
 func TestGetArticlesFilterByCategory(t *testing.T) {
 	ctx := context.Background()
 	db := openTestDB(t)
