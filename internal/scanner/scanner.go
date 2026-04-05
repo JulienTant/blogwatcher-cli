@@ -2,10 +2,12 @@ package scanner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
 
+	"github.com/cenkalti/backoff/v5"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/JulienTant/blogwatcher-cli/internal/model"
@@ -14,11 +16,17 @@ import (
 	"github.com/JulienTant/blogwatcher-cli/internal/storage"
 )
 
+const (
+	retryMaxTries       = 3
+	retryInitialBackoff = 500 * time.Millisecond
+)
+
 type ScanResult struct {
 	BlogName    string
 	NewArticles int
 	TotalFound  int
 	Source      string
+	Error       string
 }
 
 // Scanner orchestrates blog scanning using a Fetcher and Scraper.
@@ -32,6 +40,33 @@ func NewScanner(fetcher *rss.Fetcher, scraper *scraper.Scraper) *Scanner {
 	return &Scanner{fetcher: fetcher, scraper: scraper}
 }
 
+// isFatalScanError returns true for errors that should abort the entire scan
+// (context cancellation, DB errors) rather than being recorded as per-blog failures.
+func isFatalScanError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	// Feed/scrape errors are recoverable — everything else (DB errors) is fatal.
+	if rss.IsFeedError(err) || scraper.IsScrapeError(err) {
+		return false
+	}
+	return true
+}
+
+// retryHTTP retries a transient HTTP operation with exponential backoff.
+func retryHTTP[T any](ctx context.Context, op func() (T, error)) (T, error) {
+	b := &backoff.ExponentialBackOff{
+		InitialInterval:     retryInitialBackoff,
+		RandomizationFactor: backoff.DefaultRandomizationFactor,
+		Multiplier:          backoff.DefaultMultiplier,
+		MaxInterval:         backoff.DefaultMaxInterval,
+	}
+	return backoff.Retry(ctx, op, backoff.WithBackOff(b), backoff.WithMaxTries(retryMaxTries))
+}
+
 func (s *Scanner) ScanBlog(ctx context.Context, db *storage.Database, blog model.Blog) (ScanResult, error) {
 	var (
 		articles []model.Article
@@ -40,7 +75,9 @@ func (s *Scanner) ScanBlog(ctx context.Context, db *storage.Database, blog model
 
 	feedURL := blog.FeedURL
 	if feedURL == "" {
-		discovered, err := s.fetcher.DiscoverFeedURL(ctx, blog.URL)
+		discovered, err := retryHTTP(ctx, func() (string, error) {
+			return s.fetcher.DiscoverFeedURL(ctx, blog.URL)
+		})
 		if err != nil {
 			return ScanResult{BlogName: blog.Name}, err
 		}
@@ -50,14 +87,18 @@ func (s *Scanner) ScanBlog(ctx context.Context, db *storage.Database, blog model
 	}
 
 	if feedURL != "" {
-		feedArticles, err := s.fetcher.ParseFeed(ctx, feedURL)
+		feedArticles, err := retryHTTP(ctx, func() ([]rss.FeedArticle, error) {
+			return s.fetcher.ParseFeed(ctx, feedURL)
+		})
 		if err != nil {
 			// If there's a scraper fallback, try it before giving up.
 			if blog.ScrapeSelector == "" {
 				return ScanResult{BlogName: blog.Name}, err
 			}
 			// Try scraper as fallback.
-			scrapedArticles, scrapeErr := s.scraper.ScrapeBlog(ctx, blog.URL, blog.ScrapeSelector)
+			scrapedArticles, scrapeErr := retryHTTP(ctx, func() ([]scraper.ScrapedArticle, error) {
+				return s.scraper.ScrapeBlog(ctx, blog.URL, blog.ScrapeSelector)
+			})
 			if scrapeErr != nil {
 				return ScanResult{BlogName: blog.Name}, fmt.Errorf("RSS: %w; Scraper: %w", err, scrapeErr)
 			}
@@ -75,7 +116,9 @@ func (s *Scanner) ScanBlog(ctx context.Context, db *storage.Database, blog model
 			}
 		}
 	} else if blog.ScrapeSelector != "" {
-		scrapedArticles, err := s.scraper.ScrapeBlog(ctx, blog.URL, blog.ScrapeSelector)
+		scrapedArticles, err := retryHTTP(ctx, func() ([]scraper.ScrapedArticle, error) {
+			return s.scraper.ScrapeBlog(ctx, blog.URL, blog.ScrapeSelector)
+		})
 		if err != nil {
 			return ScanResult{BlogName: blog.Name}, err
 		}
@@ -142,9 +185,13 @@ func (s *Scanner) ScanAllBlogs(ctx context.Context, db *storage.Database, worker
 	if workers <= 1 {
 		results := make([]ScanResult, 0, len(blogs))
 		for _, blog := range blogs {
-			result, err := s.ScanBlog(ctx, db, blog)
-			if err != nil {
-				return nil, fmt.Errorf("scan %s: %w", blog.Name, err)
+			result, scanErr := s.ScanBlog(ctx, db, blog)
+			if scanErr != nil {
+				if isFatalScanError(scanErr) {
+					return nil, fmt.Errorf("scan %s: %w", blog.Name, scanErr)
+				}
+				result.BlogName = blog.Name
+				result.Error = scanErr.Error()
 			}
 			results = append(results, result)
 		}
@@ -162,19 +209,23 @@ func (s *Scanner) ScanAllBlogs(ctx context.Context, db *storage.Database, worker
 
 	for i := 0; i < workers; i++ {
 		g.Go(func() error {
-			workerDB, err := storage.OpenDatabase(gctx, db.Path())
-			if err != nil {
-				return err
+			workerDB, openErr := storage.OpenDatabase(gctx, db.Path())
+			if openErr != nil {
+				return openErr
 			}
 			defer func() {
-				if err := workerDB.Close(); err != nil {
-					fmt.Fprintf(os.Stderr, "close: %v\n", err)
+				if closeErr := workerDB.Close(); closeErr != nil {
+					fmt.Fprintf(os.Stderr, "close: %v\n", closeErr)
 				}
 			}()
 			for item := range jobs {
-				result, err := s.ScanBlog(gctx, workerDB, item.Blog)
-				if err != nil {
-					return fmt.Errorf("scan %s: %w", item.Blog.Name, err)
+				result, scanErr := s.ScanBlog(gctx, workerDB, item.Blog)
+				if scanErr != nil {
+					if isFatalScanError(scanErr) {
+						return fmt.Errorf("scan %s: %w", item.Blog.Name, scanErr)
+					}
+					result.BlogName = item.Blog.Name
+					result.Error = scanErr.Error()
 				}
 				results[item.Index] = result
 			}

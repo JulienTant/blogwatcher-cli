@@ -119,6 +119,29 @@ func TestDiscoverFeedURL_XMLContentType(t *testing.T) {
 	require.Equal(t, server.URL+"/tag/AI/feed/", feedURL, "should return URL directly for feed content-type")
 }
 
+func TestDiscoverFeedURL_ServerError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	_, err := newTestFetcher().DiscoverFeedURL(context.Background(), server.URL)
+	require.Error(t, err, "should return error for 5xx")
+	require.Contains(t, err.Error(), "server error status 503")
+	require.True(t, IsFeedError(err), "should be a FeedParseError so it's retryable")
+}
+
+func TestDiscoverFeedURL_NotFound(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	feedURL, err := newTestFetcher().DiscoverFeedURL(context.Background(), server.URL)
+	require.NoError(t, err, "404 should not be an error")
+	require.Empty(t, feedURL, "should return empty for 404")
+}
+
 func TestDiscoverFeedURL_RelSelf(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

@@ -6,6 +6,7 @@ require (
 	github.com/DataDog/go-secure-sdk v0.0.7
 	github.com/Masterminds/squirrel v1.5.4
 	github.com/PuerkitoBio/goquery v1.12.0
+	github.com/cenkalti/backoff/v5 v5.0.3
 	github.com/fatih/color v1.19.0
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/mmcdole/gofeed v1.3.0
