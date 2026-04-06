@@ -13,7 +13,11 @@ Track blog and RSS/Atom feed updates with the `blogwatcher-cli` tool. Supports a
 
 - Go: `go install github.com/JulienTant/blogwatcher-cli/cmd/blogwatcher-cli@latest`
 - Docker: `docker run --rm -v blogwatcher-cli:/data ghcr.io/julientant/blogwatcher-cli`
-- Binaries: [GitHub Releases](https://github.com/JulienTant/blogwatcher-cli/releases)
+- Binary (Linux amd64): `curl -sL https://github.com/JulienTant/blogwatcher-cli/releases/latest/download/blogwatcher-cli_linux_amd64.tar.gz | tar xz -C /usr/local/bin blogwatcher-cli`
+- Binary (Linux arm64): `curl -sL https://github.com/JulienTant/blogwatcher-cli/releases/latest/download/blogwatcher-cli_linux_arm64.tar.gz | tar xz -C /usr/local/bin blogwatcher-cli`
+- Binary (macOS Apple Silicon): `curl -sL https://github.com/JulienTant/blogwatcher-cli/releases/latest/download/blogwatcher-cli_darwin_arm64.tar.gz | tar xz -C /usr/local/bin blogwatcher-cli`
+- Binary (macOS Intel): `curl -sL https://github.com/JulienTant/blogwatcher-cli/releases/latest/download/blogwatcher-cli_darwin_amd64.tar.gz | tar xz -C /usr/local/bin blogwatcher-cli`
+- All binaries: [GitHub Releases](https://github.com/JulienTant/blogwatcher-cli/releases)
 
 ## Quick start
 
