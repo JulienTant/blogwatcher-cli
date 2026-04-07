@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -28,6 +29,67 @@ func TestAddBlogAndRemoveBlog(t *testing.T) {
 
 	err = RemoveBlog(ctx, db, blog.Name)
 	require.NoError(t, err, "remove blog")
+}
+
+func TestAddBlogInvalidURL(t *testing.T) {
+	ctx := context.Background()
+	db := openTestDB(t)
+	defer func() { require.NoError(t, db.Close()) }()
+
+	testCases := []struct {
+		name    string
+		url     string
+		feedURL string
+	}{
+		{"empty URL", "", ""},
+		{"invalid scheme ftp", "ftp://example.com", ""},
+		{"invalid scheme file", "file:///etc/passwd", ""},
+		{"missing scheme", "example.com", ""},
+		{"invalid URL format", "://invalid-url", ""},
+		{"invalid feed URL", "https://example.com", "ftp://feed.example.com/rss"},
+		{"empty feed URL allowed", "https://example.com", ""},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := AddBlog(ctx, db, "Test"+tc.name, tc.url, tc.feedURL, "")
+			require.Error(t, err, "expected error for invalid URL")
+
+			var invalidURLErr InvalidURLError
+			require.True(t, errors.As(err, &invalidURLErr), "error should be InvalidURLError")
+		})
+	}
+}
+
+func TestAddBlogValidURL(t *testing.T) {
+	ctx := context.Background()
+	db := openTestDB(t)
+	defer func() { require.NoError(t, db.Close()) }()
+
+	testCases := []struct {
+		name    string
+		url     string
+		feedURL string
+	}{
+		{"https URL", "https://example.com", ""},
+		{"http URL", "http://example.com", ""},
+		{"https with feed", "https://example.com", "https://example.com/feed.xml"},
+		{"http with feed", "http://example.com", "http://example.com/rss"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			blogName := "Valid" + tc.name
+			blog, err := AddBlog(ctx, db, blogName, tc.url, tc.feedURL, "")
+			require.NoError(t, err, "expected no error for valid URL")
+			require.Equal(t, tc.url, blog.URL)
+			require.Equal(t, tc.feedURL, blog.FeedURL)
+
+			// Clean up
+			err = RemoveBlog(ctx, db, blogName)
+			require.NoError(t, err)
+		})
+	}
 }
 
 func TestArticleReadUnread(t *testing.T) {

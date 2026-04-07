@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"strings"
 
 	"github.com/JulienTant/blogwatcher-cli/internal/model"
@@ -37,21 +38,49 @@ func (e ArticleNotFoundError) Error() string {
 	return fmt.Sprintf("Article %d not found", e.ID)
 }
 
-func AddBlog(ctx context.Context, db *storage.Database, name string, url string, feedURL string, scrapeSelector string) (model.Blog, error) {
+type InvalidURLError struct {
+	URL string
+}
+
+func (e InvalidURLError) Error() string {
+	return fmt.Sprintf("Invalid URL: %s", e.URL)
+}
+
+func AddBlog(ctx context.Context, db *storage.Database, name string, urlStr string, feedURL string, scrapeSelector string) (model.Blog, error) {
+	// Validate blog URL
+	if _, err := url.ParseRequestURI(urlStr); err != nil {
+		return model.Blog{}, InvalidURLError{URL: urlStr}
+	}
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
+		return model.Blog{}, InvalidURLError{URL: urlStr}
+	}
+
+	// Validate feed URL if provided
+	if feedURL != "" {
+		if _, err := url.ParseRequestURI(feedURL); err != nil {
+			return model.Blog{}, InvalidURLError{URL: feedURL}
+		}
+		parsedFeedURL, err := url.Parse(feedURL)
+		if err != nil || (parsedFeedURL.Scheme != "http" && parsedFeedURL.Scheme != "https") {
+			return model.Blog{}, InvalidURLError{URL: feedURL}
+		}
+	}
+
 	if existing, err := db.GetBlogByName(ctx, name); err != nil {
 		return model.Blog{}, err
 	} else if existing != nil {
 		return model.Blog{}, BlogAlreadyExistsError{Field: "name", Value: name}
 	}
-	if existing, err := db.GetBlogByURL(ctx, url); err != nil {
+	if existing, err := db.GetBlogByURL(ctx, urlStr); err != nil {
 		return model.Blog{}, err
 	} else if existing != nil {
-		return model.Blog{}, BlogAlreadyExistsError{Field: "URL", Value: url}
+		return model.Blog{}, BlogAlreadyExistsError{Field: "URL", Value: urlStr}
 	}
 
 	blog := model.Blog{
 		Name:           name,
-		URL:            url,
+		URL:            urlStr,
 		FeedURL:        feedURL,
 		ScrapeSelector: scrapeSelector,
 	}
