@@ -46,24 +46,24 @@ func (e InvalidURLError) Error() string {
 	return fmt.Sprintf("Invalid URL: %s", e.URL)
 }
 
-func AddBlog(ctx context.Context, db *storage.Database, name string, urlStr string, feedURL string, scrapeSelector string) (model.Blog, error) {
-	// Validate blog URL
-	if _, err := url.ParseRequestURI(urlStr); err != nil {
-		return model.Blog{}, InvalidURLError{URL: urlStr}
+// validateHTTPURL returns an InvalidURLError unless s parses as an absolute
+// http or https URL with a non-empty host. A bare scheme like "https://" is
+// rejected because url.Parse accepts it with an empty Host.
+func validateHTTPURL(s string) error {
+	parsed, err := url.Parse(s)
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return InvalidURLError{URL: s}
 	}
-	parsedURL, err := url.Parse(urlStr)
-	if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
-		return model.Blog{}, InvalidURLError{URL: urlStr}
-	}
+	return nil
+}
 
-	// Validate feed URL if provided
+func AddBlog(ctx context.Context, db *storage.Database, name string, urlStr string, feedURL string, scrapeSelector string) (model.Blog, error) {
+	if err := validateHTTPURL(urlStr); err != nil {
+		return model.Blog{}, err
+	}
 	if feedURL != "" {
-		if _, err := url.ParseRequestURI(feedURL); err != nil {
-			return model.Blog{}, InvalidURLError{URL: feedURL}
-		}
-		parsedFeedURL, err := url.Parse(feedURL)
-		if err != nil || (parsedFeedURL.Scheme != "http" && parsedFeedURL.Scheme != "https") {
-			return model.Blog{}, InvalidURLError{URL: feedURL}
+		if err := validateHTTPURL(feedURL); err != nil {
+			return model.Blog{}, err
 		}
 	}
 

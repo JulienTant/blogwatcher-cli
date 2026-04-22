@@ -45,7 +45,10 @@ func TestAddBlogInvalidURL(t *testing.T) {
 		{"invalid scheme file", "file:///etc/passwd", ""},
 		{"missing scheme", "example.com", ""},
 		{"invalid URL format", "://invalid-url", ""},
+		{"scheme only", "https://", ""},
+		{"empty host with path", "http:///path", ""},
 		{"invalid feed URL", "https://example.com", "ftp://feed.example.com/rss"},
+		{"feed URL scheme only", "https://example.com", "https://"},
 	}
 
 	for _, tc := range testCases {
