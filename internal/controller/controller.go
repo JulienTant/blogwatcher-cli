@@ -195,7 +195,8 @@ func ImportOPML(ctx context.Context, db *storage.Database, r io.Reader) (added i
 		_, err := AddBlog(ctx, db, title, siteURL, feed.FeedURL, "")
 		if err != nil {
 			var alreadyExists BlogAlreadyExistsError
-			if errors.As(err, &alreadyExists) {
+			var invalidURL InvalidURLError
+			if errors.As(err, &alreadyExists) || errors.As(err, &invalidURL) {
 				skipped++
 				continue
 			}

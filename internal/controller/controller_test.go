@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -47,7 +46,6 @@ func TestAddBlogInvalidURL(t *testing.T) {
 		{"missing scheme", "example.com", ""},
 		{"invalid URL format", "://invalid-url", ""},
 		{"invalid feed URL", "https://example.com", "ftp://feed.example.com/rss"},
-		{"empty feed URL allowed", "https://example.com", ""},
 	}
 
 	for _, tc := range testCases {
@@ -56,7 +54,7 @@ func TestAddBlogInvalidURL(t *testing.T) {
 			require.Error(t, err, "expected error for invalid URL")
 
 			var invalidURLErr InvalidURLError
-			require.True(t, errors.As(err, &invalidURLErr), "error should be InvalidURLError")
+			require.ErrorAs(t, err, &invalidURLErr, "error should be InvalidURLError")
 		})
 	}
 }
@@ -179,6 +177,36 @@ func TestImportOPMLSkipsDuplicates(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, added)
 	assert.Equal(t, 1, skipped)
+}
+
+func TestImportOPMLSkipsInvalidURLs(t *testing.T) {
+	ctx := context.Background()
+	db := openTestDB(t)
+	defer func() { require.NoError(t, db.Close()) }()
+
+	// One feed has an unsupported scheme (ftp), one is valid. The bad one
+	// must not halt the import of the good one.
+	opmlData := `<?xml version="1.0" encoding="UTF-8"?>
+<opml version="1.0">
+    <head><title>Subscriptions</title></head>
+    <body>
+        <outline type="rss" text="Bad" title="Bad" xmlUrl="ftp://bad.example.com/feed" htmlUrl="ftp://bad.example.com"/>
+        <outline type="rss" text="Good" title="Good" xmlUrl="http://good.example.com/rss" htmlUrl="http://good.example.com"/>
+    </body>
+</opml>`
+
+	added, skipped, err := ImportOPML(ctx, db, strings.NewReader(opmlData))
+	require.NoError(t, err)
+	assert.Equal(t, 1, added)
+	assert.Equal(t, 1, skipped)
+
+	good, err := db.GetBlogByName(ctx, "Good")
+	require.NoError(t, err)
+	require.NotNil(t, good, "valid feed should still be imported after an invalid one")
+
+	bad, err := db.GetBlogByName(ctx, "Bad")
+	require.NoError(t, err)
+	assert.Nil(t, bad, "invalid feed should not be persisted")
 }
 
 func TestImportOPMLFallbackSiteURL(t *testing.T) {
