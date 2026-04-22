@@ -407,6 +407,35 @@ func TestE2E(t *testing.T) {
 	}
 }
 
+func TestAddBlogInvalidURL(t *testing.T) {
+	for _, mode := range []string{"flags", "env"} {
+		t.Run(mode, func(t *testing.T) {
+			c := &cliOpts{
+				mode:   mode,
+				dbPath: filepath.Join(t.TempDir(), "test.db"),
+			}
+
+			cases := []struct {
+				name string
+				url  string
+			}{
+				{"scheme only", "https://"},
+				{"empty host with path", "http:///path"},
+				{"wrong scheme", "ftp://example.com"},
+				{"no scheme", "example.com"},
+			}
+
+			for _, tc := range cases {
+				t.Run(tc.name, func(t *testing.T) {
+					_, stderr := c.fail(t, []string{"add", "blog-" + tc.name, tc.url}, nil)
+					assert.Contains(t, stderr, "Invalid URL",
+						"expected Invalid URL error for %q", tc.url)
+				})
+			}
+		})
+	}
+}
+
 func TestImportOPML(t *testing.T) {
 	baseURL := startTestServer(t)
 
