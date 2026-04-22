@@ -30,6 +30,66 @@ func TestAddBlogAndRemoveBlog(t *testing.T) {
 	require.NoError(t, err, "remove blog")
 }
 
+func TestAddBlogInvalidURL(t *testing.T) {
+	ctx := context.Background()
+	db := openTestDB(t)
+	defer func() { require.NoError(t, db.Close()) }()
+
+	testCases := []struct {
+		name    string
+		url     string
+		feedURL string
+	}{
+		{"empty URL", "", ""},
+		{"invalid scheme ftp", "ftp://example.com", ""},
+		{"invalid scheme file", "file:///etc/passwd", ""},
+		{"missing scheme", "example.com", ""},
+		{"invalid URL format", "://invalid-url", ""},
+		{"invalid feed URL", "https://example.com", "ftp://feed.example.com/rss"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := AddBlog(ctx, db, "Test"+tc.name, tc.url, tc.feedURL, "")
+			require.Error(t, err, "expected error for invalid URL")
+
+			var invalidURLErr InvalidURLError
+			require.ErrorAs(t, err, &invalidURLErr, "error should be InvalidURLError")
+		})
+	}
+}
+
+func TestAddBlogValidURL(t *testing.T) {
+	ctx := context.Background()
+	db := openTestDB(t)
+	defer func() { require.NoError(t, db.Close()) }()
+
+	testCases := []struct {
+		name    string
+		url     string
+		feedURL string
+	}{
+		{"https URL", "https://example.com", ""},
+		{"http URL", "http://example.com", ""},
+		{"https with feed", "https://example.com", "https://example.com/feed.xml"},
+		{"http with feed", "http://example.com", "http://example.com/rss"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			blogName := "Valid" + tc.name
+			blog, err := AddBlog(ctx, db, blogName, tc.url, tc.feedURL, "")
+			require.NoError(t, err, "expected no error for valid URL")
+			require.Equal(t, tc.url, blog.URL)
+			require.Equal(t, tc.feedURL, blog.FeedURL)
+
+			// Clean up
+			err = RemoveBlog(ctx, db, blogName)
+			require.NoError(t, err)
+		})
+	}
+}
+
 func TestArticleReadUnread(t *testing.T) {
 	ctx := context.Background()
 	db := openTestDB(t)
@@ -117,6 +177,36 @@ func TestImportOPMLSkipsDuplicates(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, added)
 	assert.Equal(t, 1, skipped)
+}
+
+func TestImportOPMLSkipsInvalidURLs(t *testing.T) {
+	ctx := context.Background()
+	db := openTestDB(t)
+	defer func() { require.NoError(t, db.Close()) }()
+
+	// One feed has an unsupported scheme (ftp), one is valid. The bad one
+	// must not halt the import of the good one.
+	opmlData := `<?xml version="1.0" encoding="UTF-8"?>
+<opml version="1.0">
+    <head><title>Subscriptions</title></head>
+    <body>
+        <outline type="rss" text="Bad" title="Bad" xmlUrl="ftp://bad.example.com/feed" htmlUrl="ftp://bad.example.com"/>
+        <outline type="rss" text="Good" title="Good" xmlUrl="http://good.example.com/rss" htmlUrl="http://good.example.com"/>
+    </body>
+</opml>`
+
+	added, skipped, err := ImportOPML(ctx, db, strings.NewReader(opmlData))
+	require.NoError(t, err)
+	assert.Equal(t, 1, added)
+	assert.Equal(t, 1, skipped)
+
+	good, err := db.GetBlogByName(ctx, "Good")
+	require.NoError(t, err)
+	require.NotNil(t, good, "valid feed should still be imported after an invalid one")
+
+	bad, err := db.GetBlogByName(ctx, "Bad")
+	require.NoError(t, err)
+	assert.Nil(t, bad, "invalid feed should not be persisted")
 }
 
 func TestImportOPMLFallbackSiteURL(t *testing.T) {
