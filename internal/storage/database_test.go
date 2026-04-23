@@ -39,7 +39,7 @@ func TestDatabaseCreatesFileAndCRUD(t *testing.T) {
 	require.NoError(t, err, "add articles bulk")
 	require.Equal(t, 2, count)
 
-	list, err := db.ListArticles(ctx, false, nil, nil)
+	list, err := db.ListArticles(ctx, false, nil, nil, nil, nil)
 	require.NoError(t, err, "list articles")
 	require.Len(t, list, 2)
 
@@ -190,17 +190,17 @@ func TestListArticlesFiltersAndOrdering(t *testing.T) {
 	_, err = db.MarkArticleRead(ctx, first.ID)
 	require.NoError(t, err, "mark read")
 
-	all, err := db.ListArticles(ctx, false, nil, nil)
+	all, err := db.ListArticles(ctx, false, nil, nil, nil, nil)
 	require.NoError(t, err, "list articles")
 	require.Len(t, all, 3)
 	require.Equal(t, second.ID, all[0].ID, "expected newest article first")
 
-	unread, err := db.ListArticles(ctx, true, nil, nil)
+	unread, err := db.ListArticles(ctx, true, nil, nil, nil, nil)
 	require.NoError(t, err, "list unread")
 	require.Len(t, unread, 2)
 
 	blogID := blogB.ID
-	filtered, err := db.ListArticles(ctx, false, &blogID, nil)
+	filtered, err := db.ListArticles(ctx, false, &blogID, nil, nil, nil)
 	require.NoError(t, err, "list by blog")
 	require.Len(t, filtered, 1)
 	require.Equal(t, blogB.ID, filtered[0].BlogID)
@@ -231,7 +231,7 @@ func TestBulkInsertDuplicateRollbackAndEmpty(t *testing.T) {
 	_, err = db.AddArticlesBulk(ctx, dupArticles)
 	require.Error(t, err, "expected bulk insert to fail on duplicate url")
 
-	articles, err := db.ListArticles(ctx, false, nil, nil)
+	articles, err := db.ListArticles(ctx, false, nil, nil, nil, nil)
 	require.NoError(t, err, "list articles")
 	require.Len(t, articles, 1, "expected rollback on duplicate")
 }
@@ -346,38 +346,38 @@ func TestListArticlesFilterByCategory(t *testing.T) {
 
 	// Filter by "Go" - should return only the Go article
 	cat := "Go"
-	goArticles, err := db.ListArticles(ctx, false, nil, &cat)
+	goArticles, err := db.ListArticles(ctx, false, nil, &cat, nil, nil)
 	require.NoError(t, err, "list by category Go")
 	require.Len(t, goArticles, 1)
 	require.Equal(t, "Go Article", goArticles[0].Title)
 
 	// Filter by "Programming" - should return both categorized articles
 	cat = "Programming"
-	progArticles, err := db.ListArticles(ctx, false, nil, &cat)
+	progArticles, err := db.ListArticles(ctx, false, nil, &cat, nil, nil)
 	require.NoError(t, err, "list by category Programming")
 	require.Len(t, progArticles, 2)
 
 	// No filter - should return all 3
-	all, err := db.ListArticles(ctx, false, nil, nil)
+	all, err := db.ListArticles(ctx, false, nil, nil, nil, nil)
 	require.NoError(t, err, "list all")
 	require.Len(t, all, 3)
 
 	// Case-insensitive match - "go" should match "Go"
 	cat = "go"
-	goLower, err := db.ListArticles(ctx, false, nil, &cat)
+	goLower, err := db.ListArticles(ctx, false, nil, &cat, nil, nil)
 	require.NoError(t, err, "list by category go (lowercase)")
 	require.Len(t, goLower, 1)
 	require.Equal(t, "Go Article", goLower[0].Title)
 
 	// Case-insensitive match - "PROGRAMMING" should match "Programming"
 	cat = "PROGRAMMING"
-	progUpper, err := db.ListArticles(ctx, false, nil, &cat)
+	progUpper, err := db.ListArticles(ctx, false, nil, &cat, nil, nil)
 	require.NoError(t, err, "list by category PROGRAMMING (uppercase)")
 	require.Len(t, progUpper, 2)
 
 	// Empty string category should return all
 	empty := ""
-	allEmpty, err := db.ListArticles(ctx, false, nil, &empty)
+	allEmpty, err := db.ListArticles(ctx, false, nil, &empty, nil, nil)
 	require.NoError(t, err, "list with empty category")
 	require.Len(t, allEmpty, 3)
 }
@@ -398,7 +398,7 @@ func TestBulkInsertWithCategories(t *testing.T) {
 	require.NoError(t, err, "bulk insert")
 	require.Equal(t, 2, count)
 
-	list, err := db.ListArticles(ctx, false, nil, nil)
+	list, err := db.ListArticles(ctx, false, nil, nil, nil, nil)
 	require.NoError(t, err, "list articles")
 	require.Len(t, list, 2)
 
@@ -410,8 +410,95 @@ func TestBulkInsertWithCategories(t *testing.T) {
 			break
 		}
 	}
-	require.NotNil(t, withCat, "expected article with categories")
-	require.Equal(t, []string{"AI", "ML"}, withCat.Categories)
+	require.NotNil(t, withCat, "should find article with categories")
+	require.Len(t, withCat.Categories, 2, "should have 2 categories")
+	require.Equal(t, []string{"AI", "ML"}, withCat.Categories, "should match expected categories")
+}
+
+func TestListArticlesFilterByDate(t *testing.T) {
+	ctx := context.Background()
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "blogwatcher-cli.db")
+	db, err := OpenDatabase(ctx, path)
+	require.NoError(t, err, "open database")
+	defer func() { require.NoError(t, db.Close()) }()
+
+	blog, err := db.AddBlog(ctx, model.Blog{Name: "TestBlog", URL: "https://example.com"})
+	require.NoError(t, err, "add blog")
+
+	date1 := time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC)
+	date2 := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
+	date3 := time.Date(2024, 2, 1, 10, 0, 0, 0, time.UTC)
+
+	_, err = db.AddArticle(ctx, model.Article{BlogID: blog.ID, Title: "Article1", URL: "https://example.com/1", PublishedDate: &date1})
+	require.NoError(t, err, "add article 1")
+
+	_, err = db.AddArticle(ctx, model.Article{BlogID: blog.ID, Title: "Article2", URL: "https://example.com/2", PublishedDate: &date2})
+	require.NoError(t, err, "add article 2")
+
+	_, err = db.AddArticle(ctx, model.Article{BlogID: blog.ID, Title: "Article3", URL: "https://example.com/3", PublishedDate: &date3})
+	require.NoError(t, err, "add article 3")
+
+	_, err = db.AddArticle(ctx, model.Article{BlogID: blog.ID, Title: "NoDate", URL: "https://example.com/nodate", PublishedDate: nil})
+	require.NoError(t, err, "add article without date")
+
+	t.Run("without filters returns all articles", func(t *testing.T) {
+		articles, err := db.ListArticles(ctx, false, nil, nil, nil, nil)
+		require.NoError(t, err, "list articles")
+		require.Len(t, articles, 4, "should return all articles including no-date article")
+	})
+
+	t.Run("since filter inclusive", func(t *testing.T) {
+		since := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
+		articles, err := db.ListArticles(ctx, false, nil, nil, &since, nil)
+		require.NoError(t, err, "list articles with since filter")
+		require.Len(t, articles, 2, "should return articles on or after since date (Article2 and Article3)")
+		titles := []string{articles[0].Title, articles[1].Title}
+		require.Contains(t, titles, "Article2", "should include Article2 published on since date")
+		require.Contains(t, titles, "Article3", "should include Article3 after since date")
+	})
+
+	t.Run("before filter exclusive", func(t *testing.T) {
+		before := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
+		articles, err := db.ListArticles(ctx, false, nil, nil, nil, &before)
+		require.NoError(t, err, "list articles with before filter")
+		require.Len(t, articles, 1, "should return articles before date (only Article1)")
+		require.Equal(t, "Article1", articles[0].Title, "should only include Article1 before before-date")
+	})
+
+	t.Run("combined filters", func(t *testing.T) {
+		since := time.Date(2024, 1, 10, 0, 0, 0, 0, time.UTC)
+		before := time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC)
+		articles, err := db.ListArticles(ctx, false, nil, nil, &since, &before)
+		require.NoError(t, err, "list articles with combined filters")
+		require.Len(t, articles, 1, "should return only Article2 in range")
+		require.Equal(t, "Article2", articles[0].Title, "should only include Article2")
+	})
+
+	t.Run("nil published date excluded from filters", func(t *testing.T) {
+		since := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+		articles, err := db.ListArticles(ctx, false, nil, nil, &since, nil)
+		require.NoError(t, err, "list articles with since filter")
+		require.Len(t, articles, 3, "should exclude no-date article")
+
+		for _, article := range articles {
+			require.NotNil(t, article.PublishedDate, "all returned articles should have published date")
+		}
+	})
+
+	t.Run("after all dates", func(t *testing.T) {
+		since := time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC)
+		articles, err := db.ListArticles(ctx, false, nil, nil, &since, nil)
+		require.NoError(t, err, "list articles with since filter after all dates")
+		require.Empty(t, articles, "should return empty result")
+	})
+
+	t.Run("before all dates", func(t *testing.T) {
+		before := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
+		articles, err := db.ListArticles(ctx, false, nil, nil, nil, &before)
+		require.NoError(t, err, "list articles with before filter before all dates")
+		require.Empty(t, articles, "should return empty result")
+	})
 }
 
 func openTestDB(t *testing.T) *Database {

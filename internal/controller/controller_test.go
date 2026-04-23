@@ -122,12 +122,12 @@ func TestGetArticlesFilters(t *testing.T) {
 	_, err = db.AddArticle(ctx, model.Article{BlogID: blog.ID, Title: "Title", URL: "https://example.com/1"})
 	require.NoError(t, err, "add article")
 
-	articles, blogNames, err := GetArticles(ctx, db, false, "", "")
+	articles, blogNames, err := GetArticles(ctx, db, false, "", "", nil, nil)
 	require.NoError(t, err, "get articles")
 	require.Len(t, articles, 1)
 	require.Equal(t, blog.Name, blogNames[blog.ID])
 
-	_, _, err = GetArticles(ctx, db, false, "Missing", "")
+	_, _, err = GetArticles(ctx, db, false, "Missing", "", nil, nil)
 	require.Error(t, err, "expected blog not found error")
 }
 
@@ -290,13 +290,13 @@ func TestGetArticlesFilterByCategory(t *testing.T) {
 	require.NoError(t, err, "add article")
 
 	// Filter by Go
-	articles, _, err := GetArticles(ctx, db, false, "", "Go")
+	articles, _, err := GetArticles(ctx, db, false, "", "Go", nil, nil)
 	require.NoError(t, err, "get articles by category")
 	require.Len(t, articles, 1)
 	require.Equal(t, "Go Post", articles[0].Title)
 
 	// No filter returns all
-	all, _, err := GetArticles(ctx, db, false, "", "")
+	all, _, err := GetArticles(ctx, db, false, "", "", nil, nil)
 	require.NoError(t, err, "get all articles")
 	require.Len(t, all, 2)
 }

@@ -360,7 +360,7 @@ func (db *Database) GetExistingArticleURLs(ctx context.Context, urls []string) (
 	return result, nil
 }
 
-func (db *Database) ListArticles(ctx context.Context, unreadOnly bool, blogID *int64, category *string) ([]model.Article, error) {
+func (db *Database) ListArticles(ctx context.Context, unreadOnly bool, blogID *int64, category *string, since *time.Time, before *time.Time) ([]model.Article, error) {
 	query := sq.Select("id", "blog_id", "title", "url", "published_date", "discovered_date", "is_read", "categories").
 		From("articles").
 		OrderBy("discovered_date DESC")
@@ -375,6 +375,12 @@ func (db *Database) ListArticles(ctx context.Context, unreadOnly bool, blogID *i
 		// Categories are stored as a JSON string array. Use json_each()
 		// for exact element matching.
 		query = query.Where("EXISTS (SELECT 1 FROM json_each(categories) WHERE LOWER(json_each.value) = LOWER(?))", *category)
+	}
+	if since != nil {
+		query = query.Where(sq.GtOrEq{"published_date": since.Format(sqliteTimeLayout)})
+	}
+	if before != nil {
+		query = query.Where(sq.Lt{"published_date": before.Format(sqliteTimeLayout)})
 	}
 
 	rows, err := query.RunWith(db.conn).QueryContext(ctx)

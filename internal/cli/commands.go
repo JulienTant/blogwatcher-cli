@@ -228,8 +228,20 @@ func newArticlesCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			showAll := viper.GetBool("all")
 
+			sinceStr := viper.GetString("since")
+			beforeStr := viper.GetString("before")
+
+			since, err := parseDateFilter(sinceStr)
+			if err != nil {
+				return err
+			}
+			before, err := parseDateFilter(beforeStr)
+			if err != nil {
+				return err
+			}
+
 			return withDatabase(cmd, func(db *storage.Database) error {
-				articles, blogNames, err := controller.GetArticles(cmd.Context(), db, showAll, viper.GetString("blog"), viper.GetString("category"))
+				articles, blogNames, err := controller.GetArticles(cmd.Context(), db, showAll, viper.GetString("blog"), viper.GetString("category"), since, before)
 				if err != nil {
 					printError(err)
 					return markError(err)
@@ -259,6 +271,8 @@ func newArticlesCommand() *cobra.Command {
 	cmd.Flags().BoolP("all", "a", false, "Show all articles (including read)")
 	cmd.Flags().StringP("blog", "b", "", "Filter by blog name")
 	cmd.Flags().StringP("category", "c", "", "Filter by category")
+	cmd.Flags().String("since", "", "Show articles published on or after YYYY-MM-DD")
+	cmd.Flags().String("before", "", "Show articles published before YYYY-MM-DD")
 	return cmd
 }
 
@@ -298,7 +312,7 @@ func newReadAllCommand() *cobra.Command {
 			blogName := viper.GetString("blog")
 
 			return withDatabase(cmd, func(db *storage.Database) error {
-				articles, _, err := controller.GetArticles(cmd.Context(), db, false, blogName, "")
+				articles, _, err := controller.GetArticles(cmd.Context(), db, false, blogName, "", nil, nil)
 				if err != nil {
 					printError(err)
 					return markError(err)
@@ -472,6 +486,17 @@ func parseID(value string) (int64, error) {
 		return 0, fmt.Errorf("invalid article id: %s", value)
 	}
 	return parsed, nil
+}
+
+func parseDateFilter(dateStr string) (*time.Time, error) {
+	if dateStr == "" {
+		return nil, nil
+	}
+	parsed, err := time.Parse("2006-01-02", dateStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid date format: %s, expected YYYY-MM-DD", dateStr)
+	}
+	return &parsed, nil
 }
 
 func confirm(prompt string) (bool, error) {

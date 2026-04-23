@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/JulienTant/blogwatcher-cli/internal/model"
 	"github.com/JulienTant/blogwatcher-cli/internal/opml"
@@ -99,7 +100,7 @@ func RemoveBlog(ctx context.Context, db *storage.Database, name string) error {
 	return err
 }
 
-func GetArticles(ctx context.Context, db *storage.Database, showAll bool, blogName string, category string) ([]model.Article, map[int64]string, error) {
+func GetArticles(ctx context.Context, db *storage.Database, showAll bool, blogName string, category string, since *time.Time, before *time.Time) ([]model.Article, map[int64]string, error) {
 	var blogID *int64
 	if blogName != "" {
 		blog, err := db.GetBlogByName(ctx, blogName)
@@ -117,7 +118,7 @@ func GetArticles(ctx context.Context, db *storage.Database, showAll bool, blogNa
 		categoryPtr = &category
 	}
 
-	articles, err := db.ListArticles(ctx, !showAll, blogID, categoryPtr)
+	articles, err := db.ListArticles(ctx, !showAll, blogID, categoryPtr, since, before)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -163,7 +164,7 @@ func MarkAllArticlesRead(ctx context.Context, db *storage.Database, blogName str
 		blogID = &blog.ID
 	}
 
-	articles, err := db.ListArticles(ctx, true, blogID, nil)
+	articles, err := db.ListArticles(ctx, true, blogID, nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
