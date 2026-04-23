@@ -77,7 +77,14 @@ blogwatcher-cli articles --all
 
 # List articles from a specific blog
 blogwatcher-cli articles --blog "Tech Blog"
+
+# Filter articles by publication date
+blogwatcher-cli articles --since 2024-01-01          # Articles on or after Jan 1, 2024 (inclusive)
+blogwatcher-cli articles --before 2024-01-15         # Articles before Jan 15, 2024 (exclusive)
+blogwatcher-cli articles --since 2024-01-01 --before 2024-01-15  # Articles from Jan 1 up to but not including Jan 15
 ```
+
+Date filters use the `published_date` of articles and require the format `YYYY-MM-DD`. Articles without a publication date are excluded when date filters are applied.
 
 ### Managing Read Status
 
