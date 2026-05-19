@@ -41,6 +41,7 @@ Track blog and RSS/Atom feed updates with the `blogwatcher-cli` tool. Supports a
 - Remove a blog: `blogwatcher-cli remove "My Blog" --yes`
 - Import blogs from OPML: `blogwatcher-cli import subscriptions.opml`
 - Filter by category: `blogwatcher-cli articles --category "Engineering"`
+- Filter by date: `blogwatcher-cli articles --since 2024-01-01 --before 2024-02-01` (`--since` inclusive, `--before` exclusive, both `YYYY-MM-DD`)
 
 ## Environment variables
 
@@ -51,6 +52,8 @@ All flags can be set via environment variables with the `BLOGWATCHER_` prefix:
 - `BLOGWATCHER_SILENT` - Only output "scan done" when scanning
 - `BLOGWATCHER_YES` - Skip confirmation prompts
 - `BLOGWATCHER_CATEGORY` - Filter articles by category
+- `BLOGWATCHER_SINCE` - Filter articles published on or after `YYYY-MM-DD`
+- `BLOGWATCHER_BEFORE` - Filter articles published before `YYYY-MM-DD`
 
 ## Example output
 
