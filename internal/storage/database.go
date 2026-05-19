@@ -20,7 +20,18 @@ import (
 	"github.com/JulienTant/blogwatcher-cli/internal/storage/migrations"
 )
 
-const sqliteTimeLayout = time.RFC3339Nano
+const (
+	// sqliteTimeLayout is the layout used when parsing timestamps read from
+	// the database. RFC3339Nano accepts both fractional and non-fractional
+	// forms so legacy rows continue to round-trip.
+	sqliteTimeLayout = time.RFC3339Nano
+
+	// sqliteWriteLayout is the canonical layout used when persisting
+	// timestamps. Fixed-width, UTC, no fractional seconds — required so the
+	// --since/--before lexicographic comparison in ListArticles is stable
+	// regardless of the source precision.
+	sqliteWriteLayout = "2006-01-02T15:04:05Z"
+)
 
 func DefaultDBPath() (string, error) {
 	home, err := os.UserHomeDir()
@@ -187,7 +198,7 @@ func (db *Database) UpdateBlog(ctx context.Context, blog model.Blog) error {
 
 func (db *Database) UpdateBlogLastScanned(ctx context.Context, id int64, lastScanned time.Time) error {
 	_, err := sq.Update("blogs").
-		Set("last_scanned", lastScanned.UTC().Format(sqliteTimeLayout)).
+		Set("last_scanned", lastScanned.UTC().Format(sqliteWriteLayout)).
 		Where(sq.Eq{"id": id}).
 		RunWith(db.conn).
 		ExecContext(ctx)
@@ -377,10 +388,10 @@ func (db *Database) ListArticles(ctx context.Context, unreadOnly bool, blogID *i
 		query = query.Where("EXISTS (SELECT 1 FROM json_each(categories) WHERE LOWER(json_each.value) = LOWER(?))", *category)
 	}
 	if since != nil {
-		query = query.Where(sq.GtOrEq{"published_date": since.UTC().Format(sqliteTimeLayout)})
+		query = query.Where(sq.GtOrEq{"published_date": since.UTC().Format(sqliteWriteLayout)})
 	}
 	if before != nil {
-		query = query.Where(sq.Lt{"published_date": before.UTC().Format(sqliteTimeLayout)})
+		query = query.Where(sq.Lt{"published_date": before.UTC().Format(sqliteWriteLayout)})
 	}
 
 	rows, err := query.RunWith(db.conn).QueryContext(ctx)
@@ -522,7 +533,7 @@ func formatTimePtr(value *time.Time) *string {
 	if value == nil {
 		return nil
 	}
-	formatted := value.UTC().Format(sqliteTimeLayout)
+	formatted := value.UTC().Format(sqliteWriteLayout)
 	return &formatted
 }
 

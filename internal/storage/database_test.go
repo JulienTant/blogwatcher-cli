@@ -7,8 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/JulienTant/blogwatcher-cli/internal/model"
+	sq "github.com/Masterminds/squirrel"
 	"github.com/stretchr/testify/require"
+
+	"github.com/JulienTant/blogwatcher-cli/internal/model"
+	"github.com/JulienTant/blogwatcher-cli/internal/storage/migrations"
 )
 
 func TestDatabaseCreatesFileAndCRUD(t *testing.T) {
@@ -121,7 +124,10 @@ func TestBlogTimeRoundTrip(t *testing.T) {
 	require.NoError(t, err, "open database")
 	defer func() { require.NoError(t, db.Close()) }()
 
-	now := time.Date(2025, 1, 2, 3, 4, 5, 6, time.UTC)
+	// Sub-second precision is dropped on write so that the lexicographic
+	// comparison in ListArticles is reliable. Use a second-precision instant
+	// for the round-trip assertion.
+	now := time.Date(2025, 1, 2, 3, 4, 5, 0, time.UTC)
 	blog, err := db.AddBlog(ctx, model.Blog{
 		Name:        "Test",
 		URL:         "https://example.com",
@@ -147,7 +153,8 @@ func TestArticleTimeRoundTripAndNilDiscoveredDate(t *testing.T) {
 	blog, err := db.AddBlog(ctx, model.Blog{Name: "Test", URL: "https://example.com"})
 	require.NoError(t, err, "add blog")
 
-	published := time.Date(2024, 12, 31, 23, 59, 59, 123, time.UTC)
+	// Stored at second precision (see TestBlogTimeRoundTrip for the rationale).
+	published := time.Date(2024, 12, 31, 23, 59, 59, 0, time.UTC)
 	article, err := db.AddArticle(ctx, model.Article{
 		BlogID:        blog.ID,
 		Title:         "Title",
@@ -524,7 +531,8 @@ func TestAddArticleStoresPublishedDateInUTC(t *testing.T) {
 	require.NoError(t, err, "add article")
 
 	var stored string
-	err = db.conn.QueryRowContext(ctx, "SELECT published_date FROM articles WHERE url = ?", "https://example.com/tz").Scan(&stored)
+	err = sq.Select("published_date").From("articles").Where(sq.Eq{"url": "https://example.com/tz"}).
+		RunWith(db.conn).QueryRowContext(ctx).Scan(&stored)
 	require.NoError(t, err, "read stored published_date")
 	require.Contains(t, stored, "Z", "expected UTC marker in stored value, got %q", stored)
 	require.NotContains(t, stored, "+09:00", "expected offset to be stripped, got %q", stored)
@@ -546,7 +554,8 @@ func TestUpdateBlogLastScannedStoresInUTC(t *testing.T) {
 	require.NoError(t, db.UpdateBlogLastScanned(ctx, blog.ID, scanned))
 
 	var stored string
-	err = db.conn.QueryRowContext(ctx, "SELECT last_scanned FROM blogs WHERE id = ?", blog.ID).Scan(&stored)
+	err = sq.Select("last_scanned").From("blogs").Where(sq.Eq{"id": blog.ID}).
+		RunWith(db.conn).QueryRowContext(ctx).Scan(&stored)
 	require.NoError(t, err, "read stored last_scanned")
 	require.Contains(t, stored, "Z", "expected UTC marker, got %q", stored)
 	require.NotContains(t, stored, "+09:00", "expected offset to be stripped, got %q", stored)
@@ -587,38 +596,33 @@ func TestMigrationNormalizesLegacyTimestampsToUTC(t *testing.T) {
 	blog, err := db.AddBlog(ctx, model.Blog{Name: "Legacy", URL: "https://example.com"})
 	require.NoError(t, err, "add blog")
 
-	_, err = db.conn.ExecContext(ctx,
-		"INSERT INTO articles (blog_id, title, url, published_date, discovered_date) VALUES (?, ?, ?, ?, ?)",
-		blog.ID, "Legacy", "https://example.com/legacy",
-		"2024-01-15T10:00:00+09:00",
-		"2024-01-15 09:00:00",
-	)
+	_, err = sq.Insert("articles").
+		Columns("blog_id", "title", "url", "published_date", "discovered_date").
+		Values(blog.ID, "Legacy", "https://example.com/legacy",
+			"2024-01-15T10:00:00+09:00",
+			"2024-01-15 09:00:00").
+		RunWith(db.conn).ExecContext(ctx)
 	require.NoError(t, err, "insert legacy row")
 
-	_, err = db.conn.ExecContext(ctx,
-		"UPDATE blogs SET last_scanned = ? WHERE id = ?",
-		"2024-01-15T10:00:00+09:00", blog.ID,
-	)
+	_, err = sq.Update("blogs").
+		Set("last_scanned", "2024-01-15T10:00:00+09:00").
+		Where(sq.Eq{"id": blog.ID}).
+		RunWith(db.conn).ExecContext(ctx)
 	require.NoError(t, err, "set legacy last_scanned")
 
-	// Re-run the normalization SQL (idempotent with already-UTC values).
-	_, err = db.conn.ExecContext(ctx,
-		"UPDATE articles SET published_date = strftime('%Y-%m-%dT%H:%M:%fZ', published_date) WHERE published_date IS NOT NULL")
-	require.NoError(t, err)
-	_, err = db.conn.ExecContext(ctx,
-		"UPDATE articles SET discovered_date = strftime('%Y-%m-%dT%H:%M:%fZ', discovered_date) WHERE discovered_date IS NOT NULL")
-	require.NoError(t, err)
-	_, err = db.conn.ExecContext(ctx,
-		"UPDATE blogs SET last_scanned = strftime('%Y-%m-%dT%H:%M:%fZ', last_scanned) WHERE last_scanned IS NOT NULL")
-	require.NoError(t, err)
+	// Replay the actual migration SQL against the rows we just injected.
+	sqlBytes, err := migrations.FS.ReadFile("000003_normalize_dates_utc.up.sql")
+	require.NoError(t, err, "read migration file")
+	_, err = db.conn.ExecContext(ctx, string(sqlBytes))
+	require.NoError(t, err, "replay migration")
 
 	var published, discovered, lastScanned string
-	err = db.conn.QueryRowContext(ctx,
-		"SELECT published_date, discovered_date FROM articles WHERE url = ?",
-		"https://example.com/legacy").Scan(&published, &discovered)
+	err = sq.Select("published_date", "discovered_date").From("articles").
+		Where(sq.Eq{"url": "https://example.com/legacy"}).
+		RunWith(db.conn).QueryRowContext(ctx).Scan(&published, &discovered)
 	require.NoError(t, err)
-	err = db.conn.QueryRowContext(ctx,
-		"SELECT last_scanned FROM blogs WHERE id = ?", blog.ID).Scan(&lastScanned)
+	err = sq.Select("last_scanned").From("blogs").Where(sq.Eq{"id": blog.ID}).
+		RunWith(db.conn).QueryRowContext(ctx).Scan(&lastScanned)
 	require.NoError(t, err)
 
 	require.Equal(t, "2024-01-15T01:00:00Z", published, "JST 10:00 should normalize to UTC 01:00")
@@ -631,6 +635,39 @@ func TestMigrationNormalizesLegacyTimestampsToUTC(t *testing.T) {
 	require.NotNil(t, article)
 	require.NotNil(t, article.PublishedDate)
 	require.Equal(t, time.Date(2024, 1, 15, 1, 0, 0, 0, time.UTC), article.PublishedDate.UTC())
+}
+
+func TestMigrationPreservesUnparseableTimestamps(t *testing.T) {
+	// strftime() returns NULL on inputs it can't parse. COALESCE keeps the
+	// original value so we surface bad data instead of silently destroying it.
+	ctx := context.Background()
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "blogwatcher-cli.db")
+	db, err := OpenDatabase(ctx, path)
+	require.NoError(t, err, "open database")
+	defer func() { require.NoError(t, db.Close()) }()
+
+	blog, err := db.AddBlog(ctx, model.Blog{Name: "Bad", URL: "https://example.com"})
+	require.NoError(t, err, "add blog")
+
+	const garbage = "not-a-timestamp"
+	_, err = sq.Insert("articles").
+		Columns("blog_id", "title", "url", "published_date").
+		Values(blog.ID, "Bad", "https://example.com/bad", garbage).
+		RunWith(db.conn).ExecContext(ctx)
+	require.NoError(t, err, "insert bad row")
+
+	sqlBytes, err := migrations.FS.ReadFile("000003_normalize_dates_utc.up.sql")
+	require.NoError(t, err, "read migration file")
+	_, err = db.conn.ExecContext(ctx, string(sqlBytes))
+	require.NoError(t, err, "replay migration")
+
+	var stored string
+	err = sq.Select("published_date").From("articles").
+		Where(sq.Eq{"url": "https://example.com/bad"}).
+		RunWith(db.conn).QueryRowContext(ctx).Scan(&stored)
+	require.NoError(t, err)
+	require.Equal(t, garbage, stored, "unparseable timestamp should be preserved verbatim")
 }
 
 func openTestDB(t *testing.T) *Database {
