@@ -228,16 +228,10 @@ func newArticlesCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			showAll := viper.GetBool("all")
 
-			sinceStr := viper.GetString("since")
-			beforeStr := viper.GetString("before")
-
-			since, err := parseDateFilter(sinceStr)
+			since, before, err := parseDateRange(viper.GetString("since"), viper.GetString("before"))
 			if err != nil {
-				return err
-			}
-			before, err := parseDateFilter(beforeStr)
-			if err != nil {
-				return err
+				printError(err)
+				return markError(err)
 			}
 
 			return withDatabase(cmd, func(db *storage.Database) error {
@@ -497,6 +491,21 @@ func parseDateFilter(dateStr string) (*time.Time, error) {
 		return nil, fmt.Errorf("invalid date format: %s, expected YYYY-MM-DD", dateStr)
 	}
 	return &parsed, nil
+}
+
+func parseDateRange(sinceStr, beforeStr string) (*time.Time, *time.Time, error) {
+	since, err := parseDateFilter(sinceStr)
+	if err != nil {
+		return nil, nil, err
+	}
+	before, err := parseDateFilter(beforeStr)
+	if err != nil {
+		return nil, nil, err
+	}
+	if since != nil && before != nil && since.After(*before) {
+		return nil, nil, fmt.Errorf("--since (%s) must be on or before --before (%s)", sinceStr, beforeStr)
+	}
+	return since, before, nil
 }
 
 func confirm(prompt string) (bool, error) {

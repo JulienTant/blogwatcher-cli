@@ -501,6 +501,138 @@ func TestListArticlesFilterByDate(t *testing.T) {
 	})
 }
 
+func TestAddArticleStoresPublishedDateInUTC(t *testing.T) {
+	ctx := context.Background()
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "blogwatcher-cli.db")
+	db, err := OpenDatabase(ctx, path)
+	require.NoError(t, err, "open database")
+	defer func() { require.NoError(t, db.Close()) }()
+
+	blog, err := db.AddBlog(ctx, model.Blog{Name: "TZ", URL: "https://example.com"})
+	require.NoError(t, err, "add blog")
+
+	jst := time.FixedZone("JST", 9*3600)
+	published := time.Date(2024, 1, 15, 10, 0, 0, 0, jst) // 2024-01-15 01:00 UTC
+
+	_, err = db.AddArticle(ctx, model.Article{
+		BlogID:        blog.ID,
+		Title:         "TZ article",
+		URL:           "https://example.com/tz",
+		PublishedDate: &published,
+	})
+	require.NoError(t, err, "add article")
+
+	var stored string
+	err = db.conn.QueryRowContext(ctx, "SELECT published_date FROM articles WHERE url = ?", "https://example.com/tz").Scan(&stored)
+	require.NoError(t, err, "read stored published_date")
+	require.Contains(t, stored, "Z", "expected UTC marker in stored value, got %q", stored)
+	require.NotContains(t, stored, "+09:00", "expected offset to be stripped, got %q", stored)
+}
+
+func TestUpdateBlogLastScannedStoresInUTC(t *testing.T) {
+	ctx := context.Background()
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "blogwatcher-cli.db")
+	db, err := OpenDatabase(ctx, path)
+	require.NoError(t, err, "open database")
+	defer func() { require.NoError(t, db.Close()) }()
+
+	blog, err := db.AddBlog(ctx, model.Blog{Name: "TZ", URL: "https://example.com"})
+	require.NoError(t, err, "add blog")
+
+	jst := time.FixedZone("JST", 9*3600)
+	scanned := time.Date(2024, 5, 1, 12, 0, 0, 0, jst) // 2024-05-01 03:00 UTC
+	require.NoError(t, db.UpdateBlogLastScanned(ctx, blog.ID, scanned))
+
+	var stored string
+	err = db.conn.QueryRowContext(ctx, "SELECT last_scanned FROM blogs WHERE id = ?", blog.ID).Scan(&stored)
+	require.NoError(t, err, "read stored last_scanned")
+	require.Contains(t, stored, "Z", "expected UTC marker, got %q", stored)
+	require.NotContains(t, stored, "+09:00", "expected offset to be stripped, got %q", stored)
+}
+
+func TestDateFilterRespectsTimezoneEquivalence(t *testing.T) {
+	// An article published 2024-01-15 02:00 in JST is 2024-01-14 17:00 UTC.
+	// With --since 2024-01-15 (UTC), it should be excluded.
+	ctx := context.Background()
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "blogwatcher-cli.db")
+	db, err := OpenDatabase(ctx, path)
+	require.NoError(t, err, "open database")
+	defer func() { require.NoError(t, db.Close()) }()
+
+	blog, err := db.AddBlog(ctx, model.Blog{Name: "TZ", URL: "https://example.com"})
+	require.NoError(t, err, "add blog")
+
+	jst := time.FixedZone("JST", 9*3600)
+	jan15JST := time.Date(2024, 1, 15, 2, 0, 0, 0, jst) // = 2024-01-14T17:00:00Z
+	_, err = db.AddArticle(ctx, model.Article{BlogID: blog.ID, Title: "JST", URL: "https://example.com/jst", PublishedDate: &jan15JST})
+	require.NoError(t, err, "add article")
+
+	since := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
+	articles, err := db.ListArticles(ctx, false, nil, nil, &since, nil)
+	require.NoError(t, err, "list articles")
+	require.Empty(t, articles, "JST article published before UTC midnight Jan 15 should be excluded")
+}
+
+func TestMigrationNormalizesLegacyTimestampsToUTC(t *testing.T) {
+	ctx := context.Background()
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "blogwatcher-cli.db")
+	db, err := OpenDatabase(ctx, path)
+	require.NoError(t, err, "open database")
+	defer func() { require.NoError(t, db.Close()) }()
+
+	blog, err := db.AddBlog(ctx, model.Blog{Name: "Legacy", URL: "https://example.com"})
+	require.NoError(t, err, "add blog")
+
+	_, err = db.conn.ExecContext(ctx,
+		"INSERT INTO articles (blog_id, title, url, published_date, discovered_date) VALUES (?, ?, ?, ?, ?)",
+		blog.ID, "Legacy", "https://example.com/legacy",
+		"2024-01-15T10:00:00+09:00",
+		"2024-01-15 09:00:00",
+	)
+	require.NoError(t, err, "insert legacy row")
+
+	_, err = db.conn.ExecContext(ctx,
+		"UPDATE blogs SET last_scanned = ? WHERE id = ?",
+		"2024-01-15T10:00:00+09:00", blog.ID,
+	)
+	require.NoError(t, err, "set legacy last_scanned")
+
+	// Re-run the normalization SQL (idempotent with already-UTC values).
+	_, err = db.conn.ExecContext(ctx,
+		"UPDATE articles SET published_date = strftime('%Y-%m-%dT%H:%M:%fZ', published_date) WHERE published_date IS NOT NULL")
+	require.NoError(t, err)
+	_, err = db.conn.ExecContext(ctx,
+		"UPDATE articles SET discovered_date = strftime('%Y-%m-%dT%H:%M:%fZ', discovered_date) WHERE discovered_date IS NOT NULL")
+	require.NoError(t, err)
+	_, err = db.conn.ExecContext(ctx,
+		"UPDATE blogs SET last_scanned = strftime('%Y-%m-%dT%H:%M:%fZ', last_scanned) WHERE last_scanned IS NOT NULL")
+	require.NoError(t, err)
+
+	var published, discovered, lastScanned string
+	err = db.conn.QueryRowContext(ctx,
+		"SELECT published_date, discovered_date FROM articles WHERE url = ?",
+		"https://example.com/legacy").Scan(&published, &discovered)
+	require.NoError(t, err)
+	err = db.conn.QueryRowContext(ctx,
+		"SELECT last_scanned FROM blogs WHERE id = ?", blog.ID).Scan(&lastScanned)
+	require.NoError(t, err)
+
+	require.Equal(t, "2024-01-15T01:00:00Z", published, "JST 10:00 should normalize to UTC 01:00")
+	require.Equal(t, "2024-01-15T09:00:00Z", discovered, "space-separated form already UTC stays at same wall time")
+	require.Equal(t, "2024-01-15T01:00:00Z", lastScanned)
+
+	// Article should be readable back through the normal API.
+	article, err := db.GetArticleByURL(ctx, "https://example.com/legacy")
+	require.NoError(t, err)
+	require.NotNil(t, article)
+	require.NotNil(t, article.PublishedDate)
+	require.Equal(t, time.Date(2024, 1, 15, 1, 0, 0, 0, time.UTC), article.PublishedDate.UTC())
+}
+
 func openTestDB(t *testing.T) *Database {
 	t.Helper()
 	ctx := context.Background()

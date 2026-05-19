@@ -187,7 +187,7 @@ func (db *Database) UpdateBlog(ctx context.Context, blog model.Blog) error {
 
 func (db *Database) UpdateBlogLastScanned(ctx context.Context, id int64, lastScanned time.Time) error {
 	_, err := sq.Update("blogs").
-		Set("last_scanned", lastScanned.Format(sqliteTimeLayout)).
+		Set("last_scanned", lastScanned.UTC().Format(sqliteTimeLayout)).
 		Where(sq.Eq{"id": id}).
 		RunWith(db.conn).
 		ExecContext(ctx)
@@ -377,10 +377,10 @@ func (db *Database) ListArticles(ctx context.Context, unreadOnly bool, blogID *i
 		query = query.Where("EXISTS (SELECT 1 FROM json_each(categories) WHERE LOWER(json_each.value) = LOWER(?))", *category)
 	}
 	if since != nil {
-		query = query.Where(sq.GtOrEq{"published_date": since.Format(sqliteTimeLayout)})
+		query = query.Where(sq.GtOrEq{"published_date": since.UTC().Format(sqliteTimeLayout)})
 	}
 	if before != nil {
-		query = query.Where(sq.Lt{"published_date": before.Format(sqliteTimeLayout)})
+		query = query.Where(sq.Lt{"published_date": before.UTC().Format(sqliteTimeLayout)})
 	}
 
 	rows, err := query.RunWith(db.conn).QueryContext(ctx)
@@ -522,7 +522,7 @@ func formatTimePtr(value *time.Time) *string {
 	if value == nil {
 		return nil
 	}
-	formatted := value.Format(sqliteTimeLayout)
+	formatted := value.UTC().Format(sqliteTimeLayout)
 	return &formatted
 }
 
