@@ -32,6 +32,10 @@ func newTestFetcher() *Fetcher {
 
 func TestParseFeed(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.UserAgent() != "blogwatcher-cli" {
+			http.Error(w, "unrecognized client", http.StatusNotAcceptable)
+			return
+		}
 		if _, writeErr := w.Write([]byte(sampleFeed)); writeErr != nil {
 			http.Error(w, writeErr.Error(), http.StatusInternalServerError)
 			return
@@ -82,6 +86,10 @@ func TestParseFeedWithCategories(t *testing.T) {
 func TestDiscoverFeedURL(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.UserAgent() != "blogwatcher-cli" {
+			http.Error(w, "unrecognized client", http.StatusNotAcceptable)
+			return
+		}
 		if _, writeErr := w.Write([]byte(`<html><head><link rel="alternate" type="application/rss+xml" href="/feed.xml" /></head></html>`)); writeErr != nil {
 			http.Error(w, writeErr.Error(), http.StatusInternalServerError)
 			return
@@ -98,7 +106,34 @@ func TestDiscoverFeedURL(t *testing.T) {
 
 	feedURL, err := newTestFetcher().DiscoverFeedURL(context.Background(), server.URL)
 	require.NoError(t, err, "discover feed")
-	require.NotEmpty(t, feedURL, "expected feed url")
+	require.Equal(t, server.URL+"/feed.xml", feedURL)
+}
+
+func TestDiscoverFeedURL_CommonPathUserAgent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			// No feed link: discovery must validate a common feed path.
+			if _, err := w.Write([]byte(`<html><head></head></html>`)); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+		case "/feed":
+			if r.UserAgent() != "blogwatcher-cli" {
+				http.Error(w, "unrecognized client", http.StatusNotAcceptable)
+				return
+			}
+			if _, err := w.Write([]byte(sampleFeed)); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	feedURL, err := newTestFetcher().DiscoverFeedURL(context.Background(), server.URL)
+	require.NoError(t, err, "discover feed via common path")
+	require.Equal(t, server.URL+"/feed", feedURL)
 }
 
 func TestDiscoverFeedURL_XMLContentType(t *testing.T) {

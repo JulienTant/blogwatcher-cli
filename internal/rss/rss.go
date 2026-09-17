@@ -35,6 +35,9 @@ type Fetcher struct {
 	client *http.Client
 }
 
+// Some feed hosts reject Go's default User-Agent, so identify the application.
+const userAgent = "blogwatcher-cli"
+
 // NewFetcher creates a Fetcher with the given HTTP client.
 func NewFetcher(client *http.Client) *Fetcher {
 	return &Fetcher{client: client}
@@ -45,6 +48,7 @@ func (f *Fetcher) ParseFeed(ctx context.Context, feedURL string) ([]FeedArticle,
 	if err != nil {
 		return nil, FeedParseError{Message: fmt.Sprintf("failed to create request: %v", err)}
 	}
+	req.Header.Set("User-Agent", userAgent)
 	response, err := f.client.Do(req)
 	if err != nil {
 		return nil, FeedParseError{Message: fmt.Sprintf("failed to fetch feed: %v", err)}
@@ -87,6 +91,7 @@ func (f *Fetcher) DiscoverFeedURL(ctx context.Context, blogURL string) (string, 
 	if err != nil {
 		return "", fmt.Errorf("discover feed: %w", err)
 	}
+	req.Header.Set("User-Agent", userAgent)
 	response, err := f.client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("discover feed: %w", err)
@@ -181,6 +186,7 @@ func (f *Fetcher) isValidFeed(ctx context.Context, feedURL string) (bool, error)
 	if err != nil {
 		return false, err
 	}
+	req.Header.Set("User-Agent", userAgent)
 	response, err := f.client.Do(req)
 	if err != nil {
 		return false, err
