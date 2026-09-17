@@ -38,10 +38,14 @@ func withDatabase(cmd *cobra.Command, fn func(db *storage.Database) error) error
 }
 
 func newHTTPClient() *http.Client {
-	if viper.GetBool("unsafe-client") {
-		return httpclient.UnSafe(httpclient.WithTimeout(httpTimeout))
+	options := []httpclient.Option{
+		httpclient.WithTimeout(httpTimeout),
+		httpclient.WithFollowRedirect(true),
 	}
-	return httpclient.Safe(httpclient.WithTimeout(httpTimeout))
+	if viper.GetBool("unsafe-client") {
+		return httpclient.UnSafe(options...)
+	}
+	return httpclient.Safe(options...)
 }
 
 func newAddCommand() *cobra.Command {

@@ -1,12 +1,34 @@
 package cli
 
 import (
+	"net/http"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestNewHTTPClientFollowsRedirectsWithBoundedLimit(t *testing.T) {
+	client := newHTTPClient()
+	require.NotNil(t, client.CheckRedirect, "the safe client must install its bounded redirect policy")
+
+	first, err := http.NewRequest(http.MethodGet, "https://example.com/first", nil)
+	require.NoError(t, err)
+	second, err := http.NewRequest(http.MethodGet, "https://example.com/second", nil)
+	require.NoError(t, err)
+
+	require.NoError(t, client.CheckRedirect(second, []*http.Request{first}), "a normal redirect should be followed")
+
+	via := make([]*http.Request, 5)
+	for i := range via {
+		via[i], err = http.NewRequest(http.MethodGet, "https://example.com/redirect", nil)
+		require.NoError(t, err)
+	}
+	third, err := http.NewRequest(http.MethodGet, "https://example.com/third", nil)
+	require.NoError(t, err)
+	require.Error(t, client.CheckRedirect(third, via), "the redirect limit must remain enforced")
+}
 
 func TestParseDateFilter(t *testing.T) {
 	t.Run("empty string returns nil", func(t *testing.T) {
