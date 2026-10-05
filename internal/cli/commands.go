@@ -20,9 +20,36 @@ import (
 	"github.com/JulienTant/blogwatcher-cli/internal/scanner"
 	"github.com/JulienTant/blogwatcher-cli/internal/scraper"
 	"github.com/JulienTant/blogwatcher-cli/internal/storage"
+	"github.com/JulienTant/blogwatcher-cli/internal/version"
 )
 
 const httpTimeout = 30 * time.Second
+
+// userAgent is sent with every request. Go's default (Go-http-client/1.1) is
+// answered with 403/503 by several feed hosts whose feeds a browser fetches
+// fine, and some feed CDNs reject requests carrying no User-Agent at all.
+var userAgent = "blogwatcher-cli/" + version.Version + " (+https://github.com/JulienTant/blogwatcher-cli)"
+
+// userAgentTransport stamps the CLI's User-Agent on every outgoing request,
+// including the ones net/http re-issues while following a redirect — a header
+// set on the initial request object would otherwise have to be repeated at
+// every call site (feed parse, feed discovery, HTML scrape).
+type userAgentTransport struct {
+	base http.RoundTripper
+}
+
+func (t userAgentTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.Header.Get("User-Agent") == "" {
+		req = req.Clone(req.Context())
+		req.Header.Set("User-Agent", userAgent)
+	}
+	return t.base.RoundTrip(req)
+}
+
+func withUserAgent(client *http.Client) *http.Client {
+	client.Transport = userAgentTransport{base: client.Transport}
+	return client
+}
 
 func withDatabase(cmd *cobra.Command, fn func(db *storage.Database) error) error {
 	db, err := storage.OpenDatabase(cmd.Context(), viper.GetString("db"))
@@ -39,9 +66,17 @@ func withDatabase(cmd *cobra.Command, fn func(db *storage.Database) error) error
 
 func newHTTPClient() *http.Client {
 	if viper.GetBool("unsafe-client") {
-		return httpclient.UnSafe(httpclient.WithTimeout(httpTimeout))
+		return withUserAgent(httpclient.UnSafe(httpclient.WithTimeout(httpTimeout)))
 	}
-	return httpclient.Safe(httpclient.WithTimeout(httpTimeout))
+	// The SDK stops at the first 3xx by default: CheckRedirect is
+	// noFollowRedirect, which surfaces as "failed to fetch feed: status 301".
+	// WithFollowRedirect keeps the SSRF guard in the redirect path —
+	// maxRedirections re-authorizes every hop through the same authorizer,
+	// unlike the UnSafe client, which installs no authorizer at all.
+	return withUserAgent(httpclient.Safe(
+		httpclient.WithTimeout(httpTimeout),
+		httpclient.WithFollowRedirect(true),
+	))
 }
 
 func newAddCommand() *cobra.Command {

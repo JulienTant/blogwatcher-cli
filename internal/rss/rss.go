@@ -67,7 +67,7 @@ func (f *Fetcher) ParseFeed(ctx context.Context, feedURL string) ([]FeedArticle,
 	var articles []FeedArticle
 	for _, item := range feed.Items {
 		title := strings.TrimSpace(item.Title)
-		link := strings.TrimSpace(item.Link)
+		link := itemURL(item)
 		if title == "" || link == "" {
 			continue
 		}
@@ -80,6 +80,47 @@ func (f *Fetcher) ParseFeed(ctx context.Context, feedURL string) ([]FeedArticle,
 	}
 
 	return articles, nil
+}
+
+// itemURL returns the URL a reader should be sent to for a feed item.
+//
+// <link> is the normal source, but podcast feeds routinely omit it: the
+// Buzzsprout feed of the Captain's REWORK podcast carries only a non-permalink
+// <guid> and an <enclosure url="…mp3">, so every item was skipped as
+// link-less and the subscription produced zero articles. Fall back to the
+// permalink <guid> — a <guid> that is an absolute http(s) URL, the only shape
+// a permalink has — and then to the first <enclosure url>, which for an audio
+// podcast is the episode file a reader wants to click. An item with none of
+// the three yields "" and the caller drops it.
+func itemURL(item *gofeed.Item) string {
+	if link := strings.TrimSpace(item.Link); link != "" {
+		return link
+	}
+	if guid := strings.TrimSpace(item.GUID); isAbsoluteURL(guid) {
+		return guid
+	}
+	for _, enclosure := range item.Enclosures {
+		if enclosure == nil {
+			continue
+		}
+		if enclosureURL := strings.TrimSpace(enclosure.URL); enclosureURL != "" {
+			return enclosureURL
+		}
+	}
+	return ""
+}
+
+// isAbsoluteURL reports whether raw is an absolute http(s) URL. RSS's
+// <guid isPermaLink="true"> (the default) identifies a URL, which by
+// definition carries a scheme and a host; <guid isPermaLink="false"> is an
+// opaque identifier — what podcast feeds emit, e.g. "Buzzsprout-19704109" —
+// and must never be handed to a reader as a link.
+func isAbsoluteURL(raw string) bool {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	return (parsed.Scheme == "http" || parsed.Scheme == "https") && parsed.Host != ""
 }
 
 func (f *Fetcher) DiscoverFeedURL(ctx context.Context, blogURL string) (string, error) {

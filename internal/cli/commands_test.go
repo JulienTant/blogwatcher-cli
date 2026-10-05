@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"net/http"
 	"testing"
 	"time"
 
@@ -88,4 +89,46 @@ func TestParseDateRange(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "expected YYYY-MM-DD")
 	})
+}
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func TestUserAgentTransportSetsHeader(t *testing.T) {
+	var seen string
+	base := roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		seen = req.Header.Get("User-Agent")
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: http.NoBody}, nil
+	})
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://example.com/feed/", nil)
+	require.NoError(t, err)
+
+	resp, err := withUserAgent(&http.Client{Transport: base}).Do(req)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+
+	assert.Equal(t, userAgent, seen)
+	assert.NotContains(t, seen, "Go-http-client")
+}
+
+func TestUserAgentTransportKeepsCallerHeader(t *testing.T) {
+	var seen string
+	base := roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		seen = req.Header.Get("User-Agent")
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: http.NoBody}, nil
+	})
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://example.com/feed/", nil)
+	require.NoError(t, err)
+	req.Header.Set("User-Agent", "caller/1.0")
+
+	resp, err := withUserAgent(&http.Client{Transport: base}).Do(req)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+
+	assert.Equal(t, "caller/1.0", seen)
 }
